@@ -1,0 +1,14 @@
+# Configuration file for the galaxy NGC5443
+X0    530    528,532
+Y0    178    176,532
+FUNCTION Sersic
+PA    105    0,180
+ell    0.5    0,180
+n    2    0.6,6
+I_e    120    0,200
+r_e    60    0,100
+FUNCTION Exponential
+PA    105    0,180
+ell    0.5    0,180
+I_0    178.39715576171875    0,196.23687133789062
+h    80    0,100
