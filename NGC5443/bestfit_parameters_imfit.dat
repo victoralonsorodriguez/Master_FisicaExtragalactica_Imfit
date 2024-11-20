@@ -1,25 +1,25 @@
 # Best-fit model results for imfit 1.9.0 (OpenMP-enabled)
-# Generated on Wed Nov 20 11:44:31 2024 by the following command:
-#    imfit /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_i.fits -c /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_conf_imfit.txt --mask /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_mask2D_new.fits --gain= 4.76 --readnoise= 5.0625 --sky 184.60284 --psf /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_psf_norm.fits --save-model= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_i_model.fits --save-residual= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_i_model.fits
+# Generated on Wed Nov 20 18:49:57 2024 by the following command:
+#    imfit /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_i.fits -c /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_conf_imfit.txt --mask /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_mask2D_new.fits --gain= 4.76 --readnoise= 5.0625 --sky 184.60284 --psf /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_psf_norm.fits --save-model= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_i_model_counts.fits --save-residual= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_i_residual_model_counts.fits
 
 # Results of fit:
 #   Algorithm: Levenberg-Marquardt: status = 1 -- SUCCESS: Convergence in fit-statistic value.
 #   Fit statistic: chi-squared (data-based errors)
-#   Best-fit value: 437773.174257
-#   Reduced value: 3.576724
-#   AIC: 437795.176414
-#   BIC: 437902.040342
+#   Best-fit value: 317313.480795
+#   Reduced value: 2.592536
+#   AIC: 317335.482952
+#   BIC: 317442.346880
 
-X0		530.0672 # +/- 0.0060
-Y0		178.6584 # +/- 0.0041
+X0		530.0777 # +/- 0.0050
+Y0		178.6539 # +/- 0.0038
 FUNCTION Sersic
-PA		110.985 # +/- 0.077337	deg (CCW from +y axis)
-ell		0.389453 # +/- 0.00084505
-n		3.92245 # +/- 0.014219
-I_e		 42.832 # +/- 0.54715	counts/pixel
-r_e		65.1882 # +/- 0.54077	pixels
+PA		108.882 # +/- 0.28506	deg (CCW from +y axis)
+ell		0.192213 # +/- 0.0018307
+n		3.16924 # +/- 0.0057391
+I_e		    200 # +/- 0	counts/pixel
+r_e		14.1684 # +/- 0.027156	pixels
 FUNCTION Exponential
-PA		106.743 # +/- 0.028711	deg (CCW from +y axis)
-ell		0.766017 # +/- 0.00066585
-I_0		196.237 # +/- 0	counts/pixel
-h		84.7015 # +/- 0.11749	pixels
+PA		108.241 # +/- 0.019835	deg (CCW from +y axis)
+ell		0.68097 # +/- 0.00031973
+I_0		464.122 # +/- 0.68766	counts/pixel
+h		59.4184 # +/- 0.059205	pixels
