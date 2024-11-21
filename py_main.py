@@ -18,6 +18,9 @@ from py_info import *
 from py_conf_imfit import create_conf_imfit
 from py_conf_psf import create_conf_psf
 
+from photutils.isophote import EllipseGeometry
+from photutils.aperture import EllipticalAperture
+from photutils.isophote import Ellipse
 
 
 def open_fits(fits_path):
@@ -29,6 +32,114 @@ def open_fits(fits_path):
     img = hdu[0].data
     
     return (hdr,img,fits_name)
+
+def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
+    
+    # Loading the galaxy image
+    _,gal_img,_ = open_fits(img_gal_path)
+    gal_img_fit = gal_img
+    gal_img_log_or = np.log10(gal_img_fit)
+    gal_img_log = np.log10(gal_img_fit)
+    
+    # Loading the mask if it is required
+    if img_mask_path != None:
+        # Loading the mas
+        _,mask_img,_ = open_fits(img_mask_path)
+        # Converting from 0/1 mask to True/False mask
+        mask_img = mask_img == 1
+    
+        # Masked galaxy image
+        img_gal_mask = np.ma.masked_array(gal_img, mask=mask_img)
+        gal_img_fit = img_gal_mask
+    
+
+    # Logaritmic data to show details
+    gal_img_log = np.log10(gal_img_fit)
+    
+    fig, (ax1) = plt.subplots(figsize=(14, 5), nrows=1, ncols=1)
+    fig.subplots_adjust(left=0.04, right=0.98, bottom=0.02, top=0.98)
+    ax1.imshow(gal_img_log, origin='lower')
+    
+    
+    fig_name = f'{galaxy}_image_analyze.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', dpi=1000, bbox_inches='tight')
+    
+    # While loop beacuse we don't want to fix ellipse initial conditions
+    # So the loop is active until the programe converges
+    isophote_table = []
+    pa_ind = 0
+    while len(isophote_table) == 0:
+        # Defining a elliptical geometry
+        pa_range = np.linspace(20,160,20)
+        geometry = EllipseGeometry(x0=gal_center[0], y0=gal_center[1], 
+                                sma=50, # semimajor axis in pixels
+                                eps=0.5,
+                                pa=pa_range[pa_ind] * np.pi / 180.0) # position angle in radians
+        
+        aperture = EllipticalAperture((geometry.x0, geometry.y0), 
+                                    geometry.sma,
+                                    geometry.sma * (1 - geometry.eps),
+                                    geometry.pa)  
+        
+        # Fiting the isophotes by using ellipses
+        fit_step = 0.1
+        ellipse = Ellipse(gal_img_fit, geometry)
+        isolist = ellipse.fit_image(step=fit_step)
+        
+        # We can generate a table with the results
+        isophote_table = isolist.to_table()
+        
+        pa_ind += 1
+    
+    # Export it as a csv
+    isophote_table_name = f'{galaxy}_isophote.csv'
+    isophote_table_path = f'{cwd}/{galaxy}/{isophote_table_name}'
+    isophote_table.write(f'{isophote_table_path}', format='csv', overwrite=True)
+    
+    # Creating some figures
+    plot_rows = 1
+    plot_cols = 3
+    
+    fig = plt.figure(figsize=(21, 5))
+    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+
+    plt.subplot(plot_rows, plot_cols, 1)
+    plt.errorbar(isolist.sma, isolist.eps, yerr=isolist.ellip_err,
+                fmt='o', markersize=4)
+    plt.xlabel('Semimajor Axis Length [pix]')
+    plt.ylabel('Ellipticity')
+
+    plt.subplot(plot_rows, plot_cols, 2)
+    plt.errorbar(isolist.sma, isolist.pa / np.pi * 180.0,
+                yerr=isolist.pa_err / np.pi * 180.0, fmt='o', markersize=4)
+    plt.xlabel('Semimajor Axis Length [pix]')
+    plt.ylabel('PA [deg]')
+
+    ax = plt.subplot(plot_rows, plot_cols, 3)
+    plt.errorbar(isolist.sma, isolist.intens, yerr=isolist.int_err, fmt='o',
+                markersize=4)
+    plt.xlabel('Semimajor Axis Length [pix]')
+    plt.ylabel('Intensity [counts]')
+    ax.set_yscale('log')
+
+    fig_name = f'{galaxy}_profiles.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
+    
+    fig, (ax1) = plt.subplots(figsize=(14, 5), nrows=1, ncols=1)
+    fig.subplots_adjust(left=0.04, right=0.98, bottom=0.02, top=0.98)
+    ax1.imshow(gal_img_log_or, origin='lower')
+    
+    smas = np.linspace(10, 200, 10)
+    for sma in smas:
+        iso = isolist.get_closest(sma)
+        x, y, = iso.sampled_coordinates()
+        ax1.plot(x, y, color='white')
+    
+    fig_name = f'{galaxy}_ellipses.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
 
 
 def create_galaxy_folder(galaxy):
@@ -185,7 +296,8 @@ def main(gal_pos,galaxy):
     hdr_mask,img_mask,mask_name = open_fits(mask_path)
     
     # Changing from 0/1 mask to True/False mask
-    img_mask = img_mask == 0
+    # Values with True are not selected from image
+    img_mask = img_mask == 1
     
     # OBTAINING THE CENTER OF THE GALAXY
     
@@ -200,7 +312,7 @@ def main(gal_pos,galaxy):
     
     # For a non centered image galaxy or for a masked one 
     # Applying the mask to the image to remove stars
-    img_gal_mask = img_gal[img_mask]
+    img_gal_mask = np.ma.masked_array(img_gal,mask=img_mask)
 
     # Finding the value in the image
     max_pix_value_center = np.nanmax(img_gal_mask)
@@ -210,6 +322,10 @@ def main(gal_pos,galaxy):
     # How much deviation we allow for the center
     center_dev = 1
     
+    # Initial conditions derivied from a elliptical fitting
+    isophote_fitting(galaxy,fits_path,(x_center,y_center),
+                     img_mask_path=mask_path)
+    
     # Position angle
     pos_ang = [105,0,180]
     
@@ -218,7 +334,7 @@ def main(gal_pos,galaxy):
     
     # SERSIC FUNCTION: Bulge
     # Sersic Index
-    ser_ind = [2,0.6,6]
+    ser_ind = [3,0.6,6]
     
     # Effective Raidus
     rad_ef = [60,0,200]
@@ -340,8 +456,12 @@ if __name__ == '__main__':
     
     if len(galaxy_list) != 0:
         for gal_pos,galaxy in enumerate(galaxy_list):
-            main(gal_pos,galaxy)        
-    
+            print(f'\nAnalyzing the galaxy {galaxy}\n')
+            main(gal_pos,galaxy)    
+            print('\n#-------------------------#\n')    
+
     else:
         
         print('There is no galaxies in the directory')
+    
+    print('The analysis for all the galaxies is finished')
