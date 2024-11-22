@@ -11,10 +11,13 @@ import re
 import sys
 import subprocess
 import shutil
+import mmap
+import struct
 
 import pdb
+import warnings
+warnings.filterwarnings('ignore')
 
-from py_info import *
 from py_conf_imfit import create_conf_imfit
 from py_conf_psf import create_conf_psf
 
@@ -33,10 +36,79 @@ def open_fits(fits_path):
     
     return (hdr,img,fits_name)
 
+def plot_profiles(galaxy,csv_path_list,fig_name,mag=False,cons=None):
+    
+    # Creating some figures
+    plot_rows = 1
+    plot_cols = 3
+    
+    csv_values_dict = {}
+    df_len_list = []
+    for csv_label in csv_path_list:
+        df = pd.read_csv(csv_label[0])
+        csv_values_dict[csv_label[1]] = df
+        df_len_list.append(len(df))
+        
+    max_data_len = min(df_len_list)
+    
+    profile_to_plot = ['ellipticity','pa','intens']
+    profile_axis_label = ['Ellipcity',
+                          'Position Angle [deg]',
+                          'Intensity [counts]']
+    
+    fig = plt.figure(figsize=(7*plot_cols, 7*plot_rows))
+    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+
+    for prof_pos,prof in enumerate(profile_to_plot):
+        ax = plt.subplot(plot_rows, plot_cols, prof_pos+1)
+        plt.xlabel('Semimajor Axis Length [pix]')
+        plt.ylabel(f'{profile_axis_label[prof_pos]}')
+        for plot_label in csv_values_dict.keys():
+            
+            x = csv_values_dict[plot_label]['sma'][:max_data_len]
+            y = csv_values_dict[plot_label][f'{prof}'][:max_data_len]
+            y_error = csv_values_dict[plot_label][f'{prof}_err']
+            
+            # Isohpohes pos angle is in rad so can be changed to deg
+            if profile_axis_label[prof_pos] == 'Position Angle [deg]':
+                ang_deg_abs = y * 180 / np.pi
+                # Angles measured from x righ-hand axis
+                angle_deg = ang_deg_abs % 360
+                y = [ang-180 if ang>180 else ang for ang in angle_deg]                
+                y_error = csv_values_dict[plot_label][f'{prof}_err'] * 180 / np.pi
+            
+            # If we want to plot intensisty in magnitudes
+            elif mag==True and prof == 'intens':
+                y = values_counts_to_mag(y,cons[0],cons[1])
+                
+            #plt.errorbar(x,y,yerr=y_error,label=label,
+            #            marker='.',linewidth=1)
+            plt.scatter(x,y,label=plot_label,
+                        marker='.',s=10,linewidth=2)
+            
+        if profile_axis_label[prof_pos] == 'Intensity [counts]':
+            if mag == False: 
+                ax.set_yscale('log')
+            
+            else:
+                plt.ylabel(f'mu [mag/arcsec^2]')
+                ax.invert_yaxis()
+
+        plt.legend(loc='lower right')
+
+    fig_name_final = f'{galaxy}_{fig_name}_profiles_counts.pdf'
+    if mag == True:
+        fig_name_final = f'{galaxy}_{fig_name}_profiles_mag.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name_final}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
+    
+
 def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
     
+    print('Performing the isophote fitting\n')
+    
     # Loading the galaxy image
-    _,gal_img,_ = open_fits(img_gal_path)
+    _,gal_img,gal_img_name = open_fits(img_gal_path)
     gal_img_fit = gal_img
     gal_img_log_or = np.log10(gal_img_fit)
     gal_img_log = np.log10(gal_img_fit)
@@ -61,7 +133,7 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
     ax1.imshow(gal_img_log, origin='lower')
     
     
-    fig_name = f'{galaxy}_image_analyze.pdf'
+    fig_name = f'{gal_img_name}_image_analyze.pdf'
     fig_path = f'{cwd}/{galaxy}/{fig_name}'
     plt.savefig(f'{fig_path}', dpi=1000, bbox_inches='tight')
     
@@ -71,76 +143,66 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
     pa_ind = 0
     while len(isophote_table) == 0:
         # Defining a elliptical geometry
-        pa_range = np.linspace(20,160,20)
-        geometry = EllipseGeometry(x0=gal_center[0], y0=gal_center[1], 
-                                sma=50, # semimajor axis in pixels
-                                eps=0.5,
-                                pa=pa_range[pa_ind] * np.pi / 180.0) # position angle in radians
+        pa_range = np.linspace(20,160,50)
+        geometry = EllipseGeometry(x0=gal_center[0], y0=gal_center[1],
+                                   sma=50, # semimajor axis in pixels
+                                   eps=0.8,
+                                   pa=pa_range[pa_ind] * np.pi / 180.0) # position angle in radians
         
-        aperture = EllipticalAperture((geometry.x0, geometry.y0), 
-                                    geometry.sma,
-                                    geometry.sma * (1 - geometry.eps),
-                                    geometry.pa)  
+        aperture = EllipticalAperture((geometry.x0, geometry.y0),
+                                      geometry.sma,
+                                      geometry.sma * (1 - geometry.eps),
+                                      geometry.pa)  
         
         # Fiting the isophotes by using ellipses
-        fit_step = 0.1
+        fit_step = 0.01
+        #fit_step = 0.1
         ellipse = Ellipse(gal_img_fit, geometry)
-        isolist = ellipse.fit_image(step=fit_step)
+        isolist = ellipse.fit_image(step=fit_step,
+                                    minit=20,
+                                    sclip=2,
+                                    nclip=10,
+                                    fix_center=True,
+                                    fflag=0.5)
         
         # We can generate a table with the results
         isophote_table = isolist.to_table()
         
         pa_ind += 1
-    
+        
+        if pa_ind == len(pa_range):
+            print('Isophote fitting cannot converge')
+            break
+                
     # Export it as a csv
-    isophote_table_name = f'{galaxy}_isophote.csv'
+    isophote_table_name = f'{gal_img_name}_isophote.csv'
     isophote_table_path = f'{cwd}/{galaxy}/{isophote_table_name}'
     isophote_table.write(f'{isophote_table_path}', format='csv', overwrite=True)
     
-    # Creating some figures
-    plot_rows = 1
-    plot_cols = 3
-    
-    fig = plt.figure(figsize=(21, 5))
-    plt.subplots_adjust(hspace=0.3, wspace=0.3)
-
-    plt.subplot(plot_rows, plot_cols, 1)
-    plt.errorbar(isolist.sma, isolist.eps, yerr=isolist.ellip_err,
-                fmt='o', markersize=4)
-    plt.xlabel('Semimajor Axis Length [pix]')
-    plt.ylabel('Ellipticity')
-
-    plt.subplot(plot_rows, plot_cols, 2)
-    plt.errorbar(isolist.sma, isolist.pa / np.pi * 180.0,
-                yerr=isolist.pa_err / np.pi * 180.0, fmt='o', markersize=4)
-    plt.xlabel('Semimajor Axis Length [pix]')
-    plt.ylabel('PA [deg]')
-
-    ax = plt.subplot(plot_rows, plot_cols, 3)
-    plt.errorbar(isolist.sma, isolist.intens, yerr=isolist.int_err, fmt='o',
-                markersize=4)
-    plt.xlabel('Semimajor Axis Length [pix]')
-    plt.ylabel('Intensity [counts]')
-    ax.set_yscale('log')
-
-    fig_name = f'{galaxy}_profiles.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
+    # Creating some figures    
+    if 'model' not in gal_img_name:
+        plot_list = [(isophote_table_path,'Data')]
+        plot_profiles(galaxy,plot_list,'i')
+    else:
+        plot_list = [(isophote_table_path,'Model')]
+        plot_profiles(galaxy,plot_list,'i_model')
     
     fig, (ax1) = plt.subplots(figsize=(14, 5), nrows=1, ncols=1)
     fig.subplots_adjust(left=0.04, right=0.98, bottom=0.02, top=0.98)
     ax1.imshow(gal_img_log_or, origin='lower')
     
-    smas = np.linspace(10, 200, 10)
+    smas = np.linspace(10, 200, 20)
     for sma in smas:
         iso = isolist.get_closest(sma)
         x, y, = iso.sampled_coordinates()
-        ax1.plot(x, y, color='white')
+        ax1.plot(x, y, color='white',linewidth=0.5)
     
-    fig_name = f'{galaxy}_ellipses.pdf'
+    fig_name = f'{gal_img_name}_ellipses.pdf'
     fig_path = f'{cwd}/{galaxy}/{fig_name}'
     plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
-
+    plt.close()
+    
+    return isophote_table_path
 
 def create_galaxy_folder(galaxy):
     
@@ -155,8 +217,7 @@ def create_galaxy_folder(galaxy):
 
     return galaxy_folder_path
 
-
-def fits_mag_to_flux(fits_path,inst,zcal):
+def fits_mag_to_counts(fits_path,inst,zcal):
     
     hdr_mag,img_mag,fits_name = open_fits(fits_path)
 
@@ -171,8 +232,7 @@ def fits_mag_to_flux(fits_path,inst,zcal):
     
     return fits_flux_path
 
-
-def fits_flux_to_mag(fits_path,inst,zcal):
+def fits_counts_to_mag(fits_path,inst,zcal):
     
     hdr_flux,img_flux,fits_name = open_fits(fits_path)
 
@@ -186,15 +246,20 @@ def fits_flux_to_mag(fits_path,inst,zcal):
     fits.writeto(f'{fits_mag_path}', fits_mag_img, header=hdr_flux, overwrite=True)
     
     return fits_mag_path  
-  
 
+def values_counts_to_mag(val_counts,inst,zcal):
+    val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
+    
+    return val_mag
+    
 def galaxy_index(df_info,galaxy):
 
     index = df_info.loc[df_info['galaxy'] == galaxy].index.values[0]
     return index
 
-
 def create_psf(fits_path,galaxy,df_sky,df_psf):
+    
+    print('Creating a PSF')
     
     # Open the fits with Astropy
     hdr,img,fits_name = open_fits(fits_path)
@@ -271,6 +336,61 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
 
     return fits_psf_norm_path
 
+def extract_data_hdr(best_file):
+
+    fit_par_list = []
+    with open(best_file, "r+b") as f:
+        map_file = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+        for line in iter(map_file.readline, b''):
+            if re.findall(br'FUNCTION\b', line):
+                func = str(line.split(br' ')[1].strip(), 'utf-8')  
+                fit_par_list.append([func])
+
+    with open(best_file, "r+b") as f:
+        map_file = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+        fit_par_list.insert(0, ['Center'])  
+        func_index = 0  
+
+        for line in iter(map_file.readline, b''):
+ 
+            match = re.search(br'(\S+)\s+([\d\.\-eE]+)\s+#\s+\+/-\s+([\d\.\-eE]+)', line)
+            if match:
+                par = match.group(1).decode('utf-8') 
+                val = float(match.group(2)) 
+                err = float(match.group(3))  
+                fit_par_list[func_index].append((par, val, err))
+            
+            elif re.findall(br'FUNCTION\b', line):
+                func_index += 1        
+        
+    
+    fit_min_par = {}
+    patterns = {
+        'chi2': re.compile(br'Reduced value:\s+([\d\.\-eE]+)'),
+        'AIC': re.compile(br'AIC:\s+([\d\.\-eE]+)'),
+        'BIC': re.compile(br'BIC:\s+([\d\.\-eE]+)')
+        }
+
+    with open(best_file, "r+b") as f:
+        map_file = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+        for line in iter(map_file.readline, b''):
+            for key, pattern in patterns.items():
+                match = pattern.search(line)
+                if match:
+                    fit_min_par[key] = float(match.group(1)) 
+    
+    return fit_par_list,fit_min_par
+    
+def sersic_profile(r, I_e, R_e, n):
+
+    b_n = 2 * n - 1 / 3 + 0.009876 / n
+    I_r = I_e * np.exp(-b_n * ((r / R_e) ** (1 / n) - 1))
+    
+    return I_r
+
+def exponential_disk(r, I_0, h):
+    I_r = I_0 * np.exp(-r / h)
+    return I_r
 
 def main(gal_pos,galaxy):
     
@@ -323,7 +443,7 @@ def main(gal_pos,galaxy):
     center_dev = 1
     
     # Initial conditions derivied from a elliptical fitting
-    isophote_fitting(galaxy,fits_path,(x_center,y_center),
+    gal_iso_fit_csv_path = isophote_fitting(galaxy,fits_path,(x_center,y_center),
                      img_mask_path=mask_path)
     
     # Position angle
@@ -331,6 +451,11 @@ def main(gal_pos,galaxy):
     
     # Ellipticity
     ellip = [0.5,0,180]
+    
+    # Functions to decompose the profile
+    funct_fit = ['Sersic',
+                 'Exponential']#,
+                 #'FerrersBar2D']
     
     # SERSIC FUNCTION: Bulge
     # Sersic Index
@@ -344,17 +469,28 @@ def main(gal_pos,galaxy):
     # EXPONENTIAL FUNCTION: Disk
     # Center intensity
     I_0_disk = max_pix_value_center
-    int_cent = [I_0_disk,0,I_0_disk+I_0_disk*0.1]
+    int_cent_disk = [I_0_disk,0,I_0_disk+I_0_disk*0.25]
     
     # Length scale disk
     len_sca_disk = [80,0,200]
+    
+    # FERRERS 2D BAR
+    # Bar profile index
+    bar_index = [1,2,5] 
+    
+    # Radius bar
+    bar_rad = [50,0,200]
+    
+    # Central intensity of the bar
+    I_0_bar = max_pix_value_center
+    int_cent_bar = [I_0_bar,0,I_0_bar+I_0_bar*0.25]
     
     # Configuration file
     conf_file_name = f'{galaxy}_conf_imfit.txt'
     conf_file_path = f'{galaxy_folder_path}/{conf_file_name}'
     conf_file = open(f'{conf_file_path}','w+')
     create_conf_imfit(file=conf_file,
-                     funct=['Sersic','Exponential'],
+                     funct=funct_fit,
                      galaxy = galaxy,
                      img_center_x = [x_center,x_center-center_dev,x_center+center_dev],
                      img_center_y = [y_center,y_center-center_dev,y_center+center_dev],
@@ -363,8 +499,11 @@ def main(gal_pos,galaxy):
                      n=ser_ind,
                      r_e=rad_ef,
                      I_e=int_ef,
-                     I_0=int_cent,
-                     h=len_sca_disk)
+                     I_0=int_cent_disk,
+                     h=len_sca_disk,
+                     n_bar = bar_index,
+                     a_bar = bar_rad,
+                     c0=int_cent_bar)
     conf_file.close()
     
     # Position of the galaxy in the sky info dataframe
@@ -387,7 +526,7 @@ def main(gal_pos,galaxy):
     fits_model_path = f'{galaxy_folder_path}/{fits_model_name}'
     
     # Output files
-    residual_model_name = f'{fits_name}_residual_model_counts.fits'
+    residual_model_name = f'{fits_name}_model_residual_counts.fits'
     residual_model_path = f'{galaxy_folder_path}/{residual_model_name}'
 
     
@@ -410,15 +549,27 @@ def main(gal_pos,galaxy):
     # Returning to the main directory to continue the programe
     os.chdir(f'{cwd}')
     
+    best_parameters_name = 'bestfit_parameters_imfit.dat'
+    best_parameters_path = f'{cwd}/{galaxy}/{best_parameters_name}'
+    fit_par_list,fit_min_par = extract_data_hdr(best_parameters_path)
+    
     # Instrumental pixel scale
     inst_arcsec_pix = df_sky_info.loc[galaxy_sky_index]['inst']
     
     # Calibration constant
     zcal = df_sky_info.loc[galaxy_sky_index]['zcal']
     
-    fits_model_mag_path = fits_flux_to_mag(fits_model_path,inst_arcsec_pix,zcal)
+    fits_model_mag_path = fits_counts_to_mag(fits_model_path,inst_arcsec_pix,zcal)
     
+    mod_iso_fit_csv_path = isophote_fitting(galaxy,fits_model_path,(x_center,y_center))
     
+    # Comparing the data profile with the model profile
+    plot_list = [(gal_iso_fit_csv_path,'Data'),
+                 (mod_iso_fit_csv_path,'Model')]
+    plot_profiles(galaxy,plot_list,'compar')
+    plot_profiles(galaxy,plot_list,'compar',mag=True,cons=(inst_arcsec_pix,zcal))
+    
+    plt.close()
 
 if __name__ == '__main__':
     
@@ -450,14 +601,17 @@ if __name__ == '__main__':
         elif '.csv' in file and 'info' in file:
             csv_path = f'{files_path}/{file}'
             if 'sky' in file:
-                df_sky_info = sky_info(csv_path)
+                df_sky_info = pd.read_csv(csv_path)
             elif 'psf' in file:
-                df_psf_info = psf_info(csv_path)
+                df_psf_info = pd.read_csv(csv_path)
     
     if len(galaxy_list) != 0:
         for gal_pos,galaxy in enumerate(galaxy_list):
+            
             print(f'\nAnalyzing the galaxy {galaxy}\n')
+            
             main(gal_pos,galaxy)    
+            
             print('\n#-------------------------#\n')    
 
     else:
