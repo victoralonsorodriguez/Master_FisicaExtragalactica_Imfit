@@ -1,25 +1,25 @@
 # Best-fit model results for imfit 1.9.0 (OpenMP-enabled)
-# Generated on Fri Nov 22 03:09:52 2024 by the following command:
+# Generated on Sat Nov 23 03:33:26 2024 by the following command:
 #    imfit /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_i.fits -c /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_conf_imfit.txt --mask /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_mask2D_new.fits --gain= 4.76 --readnoise= 5.0625 --sky 184.60284 --psf /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_psf_norm.fits --save-model= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_i_model_counts.fits --save-residual= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443/NGC5443_i_model_residual_counts.fits
 
 # Results of fit:
 #   Algorithm: Levenberg-Marquardt: status = 1 -- SUCCESS: Convergence in fit-statistic value.
 #   Fit statistic: chi-squared (data-based errors)
-#   Best-fit value: 317313.480728
-#   Reduced value: 2.592536
-#   AIC: 317335.482884
-#   BIC: 317442.346813
+#   Best-fit value: 314427.868793
+#   Reduced value: 2.568960
+#   AIC: 314449.870950
+#   BIC: 314556.734879
 
-X0		530.0777 # +/- 0.0050
-Y0		178.6539 # +/- 0.0038
+X0		530.0696 # +/- 0.0051
+Y0		178.6565 # +/- 0.0039
 FUNCTION Sersic
-PA		108.883 # +/- 0.28498	deg (CCW from +y axis)
-ell		0.192198 # +/- 0.0018305
-n		3.16926 # +/- 0.0057388
-I_e		    200 # +/- 0	counts/pixel
-r_e		14.1681 # +/- 0.027156	pixels
+PA		104.897 # +/- 0.2909	deg (CCW from +y axis)
+ell		0.191216 # +/- 0.0018424
+n		2.24226 # +/- 0.013125
+I_e		431.235 # +/- 4.3759	counts/pixel
+r_e		8.87703 # +/- 0.057011	pixels
 FUNCTION Exponential
-PA		108.241 # +/- 0.019836	deg (CCW from +y axis)
-ell		0.680971 # +/- 0.00031974
-I_0		464.128 # +/- 0.68766	counts/pixel
-h		59.4181 # +/- 0.059207	pixels
+PA		108.385 # +/- 0.019312	deg (CCW from +y axis)
+ell		0.663932 # +/- 0.00036395
+I_0		506.017 # +/- 0.9279	counts/pixel
+h		56.8093 # +/- 0.065266	pixels
