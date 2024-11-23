@@ -2,9 +2,13 @@
 
 import numpy as np
 import pandas as pd
+
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
+import functools
 
 from astropy.io import fits
+from astropy.cosmology import FlatLambdaCDM
 
 import os
 import re
@@ -38,10 +42,32 @@ def open_fits(fits_path):
     return (hdr,img,fits_name)
 
 
-    
-        
 def plot_profiles(galaxy,csv_path_list,fig_name,
-                               mag=False,cons=None,final_plot=False):
+                  cons=None,final_plot=False):
+    
+    
+    cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
+    kpc_per_arcsec = 1./cosmo.arcsec_per_kpc_proper(0.005987)
+
+    
+    # Enable LaTeX rendering
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')  # Use a serif font for LaTeX rendering
+    plt.rc('font', size=14)  # Adjust size to your preference
+    # Define the LaTeX preamble with siunitx
+    plt.rcParams['text.latex.preamble'] = r'''
+                \usepackage{siunitx}
+                \sisetup{
+                  detect-family,
+                  separate-uncertainty=true,
+                  output-decimal-marker={.},
+                  exponent-product=\cdot,
+                  inter-unit-product=\cdot,
+                }
+                \DeclareSIUnit{\cts}{cts}
+                '''
+    
+    
     csv_values_dict = {}
     df_len_list = []
     for csv_label in csv_path_list:
@@ -52,7 +78,7 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
     max_data_len = min(df_len_list)
 
     profile_to_plot = ['ellipticity','pa','intens']
-    profile_axis_label = ['Ellipcity',
+    profile_axis_label = ['Ellipticity',
                           'Position Angle [deg]',
                           'Intensity [counts]']
     
@@ -65,46 +91,58 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
     plot_rows = 1
     plot_cols = len(profile_to_plot)
     
-    fig = plt.figure(figsize=(5*plot_cols, 5*plot_rows))
-    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+    fig = plt.figure(figsize=(6*plot_cols, 5*plot_rows))
+    plt.subplots_adjust(hspace=0.5, wspace=0.5)
 
-    colors = ['red','lime','blue','deeppink']
-    markers = ['.','v','*','x']
+    colors = ['gold','deepskyblue','lime','deeppink']
+    markers = ['o','v','*','X']
     
     # Every iteration of this loop is a new plot
     for prof_pos,prof in enumerate(profile_to_plot):
         color_index = 0
+        y_max = -10**20
+        y_min = 10**20 
         ax = plt.subplot(plot_rows, plot_cols, prof_pos+1)
-        plt.xlabel('Semimajor Axis Length [pix]')
-        plt.ylabel(f'{profile_axis_label[prof_pos]}')
+        
         for plot_label in csv_values_dict.keys():
 
             if plot_label == 'func_df':
-                
+                total_int_label_list = []
+                for col in csv_values_dict[plot_label].columns:
+                        if col != 'sma' and col != 'Total_int':
+                            total_int_label_list.append(col)  
+                result = ' + '.join(f'{label}' for label in total_int_label_list)
+
                 for col in csv_values_dict[plot_label].columns:
         
                     if col != 'sma':
                         
                         x = csv_values_dict[plot_label]['sma'][:max_data_len]
                         y = csv_values_dict[plot_label][f'{col}'][:max_data_len]
+                        
+                        if max(y) > y_max:
+                            y_max = max(y)
+                        if min(y) < y_min:
+                            y_min = min(y)
 
                         if col == 'Total_int':
                             
-                            plt.plot(x,y,label='Components intensity',
+                            plt.plot(x,y,label=f'{result}',
                                     linewidth=1,color='black',
                                     linestyle='-.',zorder=3)
                             
                         else:
                             plt.scatter(x,y,label=col,
                                         marker=markers[color_index],s=10,
-                                        linewidth=0.5,color=colors[color_index],zorder=1)
+                                        linewidth=0.15,edgecolor='black',
+                                        color=colors[color_index],zorder=1)
                             color_index += 1
 
             else:
                 
                 x = csv_values_dict[plot_label]['sma'][:max_data_len]
                 y = csv_values_dict[plot_label][f'{prof}'][:max_data_len]
-                y_error = csv_values_dict[plot_label][f'{prof}_err']
+                
                 
                 # Isohpohes pos angle is in rad so can be changed to deg
                 if profile_axis_label[prof_pos] == 'Position Angle [deg]':
@@ -117,47 +155,139 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
                          else ang for ang in angle_deg]                
                     y_error = csv_values_dict[plot_label][f'{prof}_err'] * 180 / np.pi
                 
-                # If we want to plot intensisty in magnitudes
-                elif mag==True and prof == 'intens':
-                    y = values_counts_to_mag(y,cons[0],cons[1])
+                if max(y) > y_max:
+                        y_max = max(y)
+                if min(y) < y_min:
+                        y_min = min(y)
                 
                 marker_size = 11
                 if plot_label == 'Model':
-                    marker_size = 13
+                    marker_size = 14
                 plt.scatter(x,y,label=plot_label,
                             marker=markers[color_index],s=marker_size,
-                            linewidth=1,color=colors[color_index],zorder=2)
+                            linewidth=0.15,edgecolor='black',
+                            color=colors[color_index],zorder=2)
                 color_index += 1
 
-                
-        if profile_axis_label[prof_pos] == 'Intensity [counts]':
-            if mag == False: 
-                ax.set_yscale('log')
-            
-            else:
-                plt.ylabel(f'mu [mag/arcsec^2]')
-                ax.invert_yaxis()
-
         if prof == 'intens':
-            plt.legend(loc='upper right')
+            plt.legend(loc='upper right',prop={'size': 10})
         
         else:
-            plt.legend(loc='lower right')
+            plt.legend(loc='lower right',prop={'size': 10})
 
 
+        # Customizing the plots       
+        # X bottom axis is common
+        ax.set_xlabel(r'$Semimajor\ Axis\ Length\ [\mathrm{pix}]$')
+        
+        ax.set_xticks(np.linspace(np.min(x), np.max(x), 7))
+        ax.set_xmargin(0.1)
+        ax.minorticks_on()
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+        
+        ax.grid(True,alpha=0.2)
+        
+        # TOP X axis is common
+        axxtop = ax.secondary_xaxis('top',
+                                    functions=(functools.partial(px_to_kpc,inst=cons[0]),
+                                               functools.partial(kpc_to_px,inst=cons[0])))
+        
+        px_ticks = ax.get_xticks()
+        arcsec_ticks = px_to_kpc(px_ticks,inst=cons[0])
+        axxtop.set_xticks(arcsec_ticks)
+        
+        axxtop.minorticks_on()
+        
+        axxtop.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+        
+        axxtop.set_xlabel(r'$Semimajor\ Axis\ Length\ [\mathrm{kpc}]$',labelpad=8)
+        axxtop.tick_params(axis='x', which='major')
+        
+        # Y axes are different for each plot
+        # For intensisty
+        if prof == 'intens':
+        
+            # Y left axis
+            ax.set_ylabel(r'$Intensity\ [\mathrm{counts}]$')
+            ax.set_yticks(np.linspace(np.min(y_min), np.max(y_max), 7))
+            ax.minorticks_on()
+            
+            ax.set_yscale('log')
+            ax.set_ylim(bottom=0.5)
+            
+            # Y right axis
+            axyrig = ax.secondary_yaxis('right',
+                                        functions=(functools.partial(values_counts_to_mag,inst=cons[0],zcal=cons[1]),
+                                                   functools.partial(values_mag_to_counts,inst=cons[0],zcal=cons[1])))
+            
+            counts_ticks = ax.get_yticks()
+            mag_ticks = values_counts_to_mag(counts_ticks,inst=cons[0],zcal=cons[1])
+            axyrig.set_yticks(mag_ticks)
+            axyrig.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            axyrig.yaxis.set_minor_formatter(plt.NullFormatter())
+            
+            axyrig.minorticks_on()
+            
+            axyrig.set_ylabel(r'$\mu\ [\mathrm{mag/arcsec^2}]$')
+            axyrig.tick_params(axis='y', which='major')
+            
+        elif prof == 'ellipticity':
+            
+            # Y left axis
+            ax.set_ylabel(r'$Ellipticity$')
+            ax.set_yticks(np.linspace(np.min(y_min), np.max(y_max), 7))
+            ax.minorticks_on()
+            
+            ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            
+            # Y right axis
+            axyrig = ax.secondary_yaxis('right',functions=(ell_to_axrat,axrat_to_ell))
+            
+            ell_ticks = ax.get_yticks()
+            axrat_ticks = ell_to_axrat(ell_ticks)
+            axyrig.set_yticks(axrat_ticks)
+            axyrig.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            axyrig.yaxis.set_minor_formatter(plt.NullFormatter())
+            
+            axyrig.minorticks_on()
+            
+            axyrig.set_ylabel(r'$Axis\ ratio$')
+            axyrig.tick_params(axis='y', which='major')
+            
+            
+        elif prof == 'pa':
+        
+            # Y left axis
+            ax.set_ylabel(r'$Position\ Angle\ [\mathrm{deg}]$')
+            ax.set_yticks(np.linspace(np.min(y_min), np.max(y_max), 7))
+            ax.minorticks_on()
+            
+            ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            
+            # Y right axis
+            axyrig = ax.secondary_yaxis('right',functions=(deg_to_rad,rad_to_deg))
+            
+            deg_ticks = ax.get_yticks()
+            rad_ticks = deg_to_rad(deg_ticks)
+            axyrig.set_yticks(rad_ticks)
+            axyrig.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            axyrig.yaxis.set_minor_formatter(plt.NullFormatter())
+            
+            axyrig.minorticks_on()
+            
+            axyrig.set_ylabel(r'$Position\ Angle\ [\mathrm{rad}]$')
+            axyrig.tick_params(axis='y', which='major')
+            
 
-    fig_name_final = f'{galaxy}_{fig_name}_profiles_counts.pdf'
-    if mag == True:
-        fig_name_final = f'{galaxy}_{fig_name}_profiles_mag.pdf'
+    fig_name_final = f'{galaxy}_{fig_name}_profiles.pdf'
     fig_path = f'{cwd}/{galaxy}/{fig_name_final}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
-    
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')    
     
 def plot_fit_func(galaxy,fit_par_list,rad_range):
 
     int_sum = np.zeros(len(rad_range))
     
-    fig = plt.figure(figsize=(7, 7))
+    fig = plt.figure(figsize=(5, 5))
     plt.subplots_adjust(hspace=0.3, wspace=0.3)
     ax = plt.subplot(1, 1, 1)
 
@@ -198,7 +328,9 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
             int_sum = int_sum + ser_int_func
             
             plt.scatter(rad_range,ser_int_func,label='Sersic',
-                        marker='.',s=10,linewidth=1)
+                        marker='o',s=10,
+                        linewidth=0.15,edgecolor='black',
+                        color='gold',zorder=1)
             
         elif 'Exponential' in func_par:
             exp_ind_list = next((i for i, item in enumerate(fit_par_list) if item[0] == 'Exponential'), None)
@@ -218,15 +350,22 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
             int_sum = int_sum + exp_int_func
     
             plt.scatter(rad_range,exp_int_func,label='Exponential',
-                        marker='*',s=10,linewidth=1)
+                        marker='v',s=10,
+                        linewidth=0.15,edgecolor='black',
+                        color='dodgerblue',zorder=1)
     
-    int_func_df.insert(loc=0,column='Total_int',value=int_sum)
-    plt.scatter(rad_range,int_sum,label='Total Intensity',
-                        marker='X',s=10,linewidth=0.5)
+    if len(fit_par_list) > 2:
+        
+        int_func_df.insert(loc=1,column='Total_int',value=int_sum)
+        
+    plt.plot(rad_range,int_sum,label='Total Intensity',
+                linewidth=1,color='black',
+                linestyle='-.',zorder=3)
 
     plt.xlabel('Semimajor Axis Length [pix]')
     plt.ylabel('Intensity [counts]')
     plt.yscale('log')
+    ax.set_ylim(bottom=0.5)   
     plt.legend(loc='upper right')
     
     fig_name = f'{galaxy}_fit_func.pdf'
@@ -245,7 +384,7 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
         return None
 
 
-def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
+def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None):
     
     print('Performing the isophote fitting\n')
     
@@ -323,10 +462,10 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
     # Creating some figures    
     if 'model' not in gal_img_name:
         plot_list = [(isophote_table_path,'Data')]
-        plot_profiles(galaxy,plot_list,'i')
+        plot_profiles(galaxy,plot_list,'i',cons=cons)
     else:
         plot_list = [(isophote_table_path,'Model')]
-        plot_profiles(galaxy,plot_list,'i_model')
+        plot_profiles(galaxy,plot_list,'i_model',cons=cons)
     
     fig, (ax1) = plt.subplots(figsize=(14, 5), nrows=1, ncols=1)
     fig.subplots_adjust(left=0.04, right=0.98, bottom=0.02, top=0.98)
@@ -388,10 +527,60 @@ def fits_counts_to_mag(fits_path,inst,zcal):
     
     return fits_mag_path  
 
+# Changing from counts to magnitudes
 def values_counts_to_mag(val_counts,inst,zcal):
     val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
     
     return val_mag
+
+def values_mag_to_counts(val_mag,inst,zcal):
+    
+    val_count = 10**((val_mag - 2.5*np.log10(inst**2)-zcal)/-2.5)
+    
+    return val_count
+
+# Changing from pixeles to kpc 
+def px_to_kpc(px,inst):
+
+    arcsec = px * inst 
+    kpc = arcsec_to_kpc(arcsec)
+    return kpc
+
+def kpc_to_px(kpc,inst):
+    
+    arcsec = kpc_to_arcsec(kpc)
+    px = arcsec / inst 
+    return px
+
+def arcsec_to_kpc(arcsec):
+    
+    kpc = arcsec * 0.12
+    
+    return kpc
+
+def kpc_to_arcsec(kpc):
+    
+    arcsec = kpc / (0.12)
+    
+    return arcsec
+
+# Changing from Ellipticity to Axis ratio
+def ell_to_axrat(ell):
+    axrat = 1 - ell
+    return axrat
+
+def axrat_to_ell(axrat):
+    ell = 1 - axrat
+    return ell
+
+# Changing from degrees to radian
+def deg_to_rad(deg):
+    rad = deg * (np.pi / 180)
+    return rad
+
+def rad_to_deg(rad):
+    deg = rad * (180 / np.pi)
+    return deg
     
 def galaxy_index(df_info,galaxy):
 
@@ -533,10 +722,15 @@ def exponential_disk(r, I_0, h):
     I_r = I_0 * np.exp(-r / h)
     return I_r
 
+'''#-------------MAIN FUNCTION-------------'''
+
 def main(gal_pos,galaxy):
     
     # Creating a folder for each galaxy
     galaxy_folder_path = create_galaxy_folder(galaxy)
+    
+    # Position of the galaxy in the sky info dataframe
+    galaxy_sky_index = galaxy_index(df_sky_info,galaxy)
     
     # Fits file to analyze
     fits_file = fits_image_list[gal_pos]
@@ -583,9 +777,17 @@ def main(gal_pos,galaxy):
     # How much deviation we allow for the center
     center_dev = 1
     
+    # Instrumental pixel scale
+    inst_arcsec_pix = df_sky_info.loc[galaxy_sky_index]['inst']
+    
+    # Calibration constant
+    zcal = df_sky_info.loc[galaxy_sky_index]['zcal']
+    
     # Initial conditions derivied from a elliptical fitting
-    gal_iso_fit_csv_path = isophote_fitting(galaxy,fits_path,(x_center,y_center),
-                     img_mask_path=mask_path)
+    gal_iso_fit_csv_path = isophote_fitting(galaxy,fits_path,
+                                            (x_center,y_center),
+                                            img_mask_path=mask_path,
+                                            cons=(inst_arcsec_pix,zcal))
     
     # Position angle
     pos_ang = [105,0,180]
@@ -646,9 +848,7 @@ def main(gal_pos,galaxy):
                      a_bar = bar_rad,
                      c0=int_cent_bar)
     conf_file.close()
-    
-    # Position of the galaxy in the sky info dataframe
-    galaxy_sky_index = galaxy_index(df_sky_info,galaxy)
+
     
     # Gain value
     gain_value = df_sky_info.loc[galaxy_sky_index]['gain']
@@ -701,28 +901,23 @@ def main(gal_pos,galaxy):
     int_func_csv_path = plot_fit_func(galaxy,fit_par_list,
                                       rad_range=np.linspace(sma_min,sma_max,sma_len))
     
-    # Instrumental pixel scale
-    inst_arcsec_pix = df_sky_info.loc[galaxy_sky_index]['inst']
-    
-    # Calibration constant
-    zcal = df_sky_info.loc[galaxy_sky_index]['zcal']
-    
     fits_model_mag_path = fits_counts_to_mag(fits_model_path,inst_arcsec_pix,zcal)
     
-    mod_iso_fit_csv_path = isophote_fitting(galaxy,fits_model_path,(x_center,y_center))
+    mod_iso_fit_csv_path = isophote_fitting(galaxy,fits_model_path,
+                                            (x_center,y_center),
+                                            cons=(inst_arcsec_pix,zcal))
     
     # Comparing the data profile with the model profile
     plot_list = [(mod_iso_fit_csv_path,'Model'),
-                 (gal_iso_fit_csv_path,'Data')]
+                 (gal_iso_fit_csv_path,'Original Data')]
     
-    plot_profiles(galaxy,plot_list,'compar')
-    plot_profiles(galaxy,plot_list,'compar',mag=True,cons=(inst_arcsec_pix,zcal))
+    plot_profiles(galaxy,plot_list,'compar',cons=(inst_arcsec_pix,zcal))
     
     plot_list = [(int_func_csv_path,'func_df'),
                  (mod_iso_fit_csv_path,'Model'),
-                 (gal_iso_fit_csv_path,'Data')]
+                 (gal_iso_fit_csv_path,'Original Data')]
     
-    plot_profiles(galaxy,plot_list,'all',final_plot=True)
+    plot_profiles(galaxy,plot_list,'all',cons=(inst_arcsec_pix,zcal),final_plot=True)
     
     plt.close()
 
@@ -781,6 +976,6 @@ if __name__ == '__main__':
     # Computing the required time
     end_time = time.time()
     total_time = end_time - start_time
-    print(f'Total computing time was {(total_time):1.2f} seconds\n') 
+    print(f'Total computing time was {(total_time//60):.2f} minutes and {(total_time%60):.2f} seconds\n') 
     
     print('\n#--------------------------------------------------#\n')    
