@@ -15,6 +15,7 @@ import mmap
 import struct
 
 import pdb
+import time
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -36,56 +37,99 @@ def open_fits(fits_path):
     
     return (hdr,img,fits_name)
 
-def plot_profiles(galaxy,csv_path_list,fig_name,mag=False,cons=None):
+
     
-    # Creating some figures
-    plot_rows = 1
-    plot_cols = 3
-    
+        
+def plot_profiles(galaxy,csv_path_list,fig_name,
+                               mag=False,cons=None,final_plot=False):
     csv_values_dict = {}
     df_len_list = []
     for csv_label in csv_path_list:
         df = pd.read_csv(csv_label[0])
         csv_values_dict[csv_label[1]] = df
         df_len_list.append(len(df))
-        
+
     max_data_len = min(df_len_list)
-    
+
     profile_to_plot = ['ellipticity','pa','intens']
     profile_axis_label = ['Ellipcity',
                           'Position Angle [deg]',
                           'Intensity [counts]']
     
-    fig = plt.figure(figsize=(7*plot_cols, 7*plot_rows))
+    if final_plot == True:
+        
+        profile_to_plot = ['intens']
+        profile_axis_label = ['Intensity [counts]']
+        
+    # Creating some figures
+    plot_rows = 1
+    plot_cols = len(profile_to_plot)
+    
+    fig = plt.figure(figsize=(5*plot_cols, 5*plot_rows))
     plt.subplots_adjust(hspace=0.3, wspace=0.3)
 
+    colors = ['red','lime','blue','deeppink']
+    markers = ['.','v','*','x']
+    
+    # Every iteration of this loop is a new plot
     for prof_pos,prof in enumerate(profile_to_plot):
+        color_index = 0
         ax = plt.subplot(plot_rows, plot_cols, prof_pos+1)
         plt.xlabel('Semimajor Axis Length [pix]')
         plt.ylabel(f'{profile_axis_label[prof_pos]}')
         for plot_label in csv_values_dict.keys():
-            
-            x = csv_values_dict[plot_label]['sma'][:max_data_len]
-            y = csv_values_dict[plot_label][f'{prof}'][:max_data_len]
-            y_error = csv_values_dict[plot_label][f'{prof}_err']
-            
-            # Isohpohes pos angle is in rad so can be changed to deg
-            if profile_axis_label[prof_pos] == 'Position Angle [deg]':
-                ang_deg_abs = y * 180 / np.pi
-                # Angles measured from x righ-hand axis
-                angle_deg = ang_deg_abs % 360
-                y = [ang-180 if ang>180 else ang for ang in angle_deg]                
-                y_error = csv_values_dict[plot_label][f'{prof}_err'] * 180 / np.pi
-            
-            # If we want to plot intensisty in magnitudes
-            elif mag==True and prof == 'intens':
-                y = values_counts_to_mag(y,cons[0],cons[1])
+
+            if plot_label == 'func_df':
                 
-            #plt.errorbar(x,y,yerr=y_error,label=label,
-            #            marker='.',linewidth=1)
-            plt.scatter(x,y,label=plot_label,
-                        marker='.',s=10,linewidth=2)
-            
+                for col in csv_values_dict[plot_label].columns:
+        
+                    if col != 'sma':
+                        
+                        x = csv_values_dict[plot_label]['sma'][:max_data_len]
+                        y = csv_values_dict[plot_label][f'{col}'][:max_data_len]
+
+                        if col == 'Total_int':
+                            
+                            plt.plot(x,y,label='Components intensity',
+                                    linewidth=1,color='black',
+                                    linestyle='-.',zorder=3)
+                            
+                        else:
+                            plt.scatter(x,y,label=col,
+                                        marker=markers[color_index],s=10,
+                                        linewidth=0.5,color=colors[color_index],zorder=1)
+                            color_index += 1
+
+            else:
+                
+                x = csv_values_dict[plot_label]['sma'][:max_data_len]
+                y = csv_values_dict[plot_label][f'{prof}'][:max_data_len]
+                y_error = csv_values_dict[plot_label][f'{prof}_err']
+                
+                # Isohpohes pos angle is in rad so can be changed to deg
+                if profile_axis_label[prof_pos] == 'Position Angle [deg]':
+                    ang_deg_abs = y * 180 / np.pi
+                    # Angles measured from x righ-hand axis
+                    angle_deg = ang_deg_abs % 360
+                    y = [(ang+90) if (ang<90) 
+                         else (ang-90) if (90<ang<270) 
+                         else (ang-270) if (ang>270) 
+                         else ang for ang in angle_deg]                
+                    y_error = csv_values_dict[plot_label][f'{prof}_err'] * 180 / np.pi
+                
+                # If we want to plot intensisty in magnitudes
+                elif mag==True and prof == 'intens':
+                    y = values_counts_to_mag(y,cons[0],cons[1])
+                
+                marker_size = 11
+                if plot_label == 'Model':
+                    marker_size = 13
+                plt.scatter(x,y,label=plot_label,
+                            marker=markers[color_index],s=marker_size,
+                            linewidth=1,color=colors[color_index],zorder=2)
+                color_index += 1
+
+                
         if profile_axis_label[prof_pos] == 'Intensity [counts]':
             if mag == False: 
                 ax.set_yscale('log')
@@ -94,7 +138,13 @@ def plot_profiles(galaxy,csv_path_list,fig_name,mag=False,cons=None):
                 plt.ylabel(f'mu [mag/arcsec^2]')
                 ax.invert_yaxis()
 
-        plt.legend(loc='lower right')
+        if prof == 'intens':
+            plt.legend(loc='upper right')
+        
+        else:
+            plt.legend(loc='lower right')
+
+
 
     fig_name_final = f'{galaxy}_{fig_name}_profiles_counts.pdf'
     if mag == True:
@@ -102,6 +152,98 @@ def plot_profiles(galaxy,csv_path_list,fig_name,mag=False,cons=None):
     fig_path = f'{cwd}/{galaxy}/{fig_name_final}'
     plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
     
+    
+def plot_fit_func(galaxy,fit_par_list,rad_range):
+
+    int_sum = np.zeros(len(rad_range))
+    
+    fig = plt.figure(figsize=(7, 7))
+    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+    ax = plt.subplot(1, 1, 1)
+
+    int_func_df = pd.DataFrame(columns=[])
+    int_func_df['sma'] = rad_range
+
+    for func_par in fit_par_list:
+        
+        if 'Center' in func_par:
+            cen_ind_list = next((i for i, item in enumerate(fit_par_list) if item[0] == 'Center'), None)
+            
+            cen_par_val = {par[0]: par[1] for par in fit_par_list[cen_ind_list][1:]} 
+            cen_par_err = {par[0]: par[2] for par in fit_par_list[cen_ind_list][1:]} 
+            
+            x0_val = cen_par_val['X0']
+            y0_val = cen_par_val['Y0']
+            
+            x0_err = cen_par_err['X0']
+            y0_err = cen_par_err['Y0']
+        
+        elif 'Sersic' in func_par:
+            ser_ind_list = next((i for i, item in enumerate(fit_par_list) if item[0] == 'Sersic'), None)
+            
+            ser_par_val = {par[0]: par[1] for par in fit_par_list[ser_ind_list][1:]} 
+            ser_par_err = {par[0]: par[2] for par in fit_par_list[ser_ind_list][1:]} 
+            
+            n_val = ser_par_val['n']
+            I_e_val = ser_par_val['I_e']
+            r_e_val = ser_par_val['r_e']
+            
+            n_err = ser_par_err['n']
+            I_e_err = ser_par_err['I_e']
+            r_e_err = ser_par_err['r_e']
+            
+            ser_int_func = sersic_profile(rad_range,n_val,r_e_val,I_e_val)
+            int_func_df['Sersic'] = ser_int_func
+            
+            int_sum = int_sum + ser_int_func
+            
+            plt.scatter(rad_range,ser_int_func,label='Sersic',
+                        marker='.',s=10,linewidth=1)
+            
+        elif 'Exponential' in func_par:
+            exp_ind_list = next((i for i, item in enumerate(fit_par_list) if item[0] == 'Exponential'), None)
+            
+            exp_par_val = {par[0]: par[1] for par in fit_par_list[exp_ind_list][1:]} 
+            exp_par_err = {par[0]: par[2] for par in fit_par_list[exp_ind_list][1:]} 
+            
+            I_0_val = exp_par_val['I_0']
+            h_val = exp_par_val['h']
+            
+            I_0_err = exp_par_err['I_0']
+            h_err = exp_par_err['h']
+            
+            exp_int_func = exponential_disk(rad_range,I_0_val,h_val)
+            int_func_df['Exponential'] = exp_int_func
+            
+            int_sum = int_sum + exp_int_func
+    
+            plt.scatter(rad_range,exp_int_func,label='Exponential',
+                        marker='*',s=10,linewidth=1)
+    
+    int_func_df.insert(loc=0,column='Total_int',value=int_sum)
+    plt.scatter(rad_range,int_sum,label='Total Intensity',
+                        marker='X',s=10,linewidth=0.5)
+
+    plt.xlabel('Semimajor Axis Length [pix]')
+    plt.ylabel('Intensity [counts]')
+    plt.yscale('log')
+    plt.legend(loc='upper right')
+    
+    fig_name = f'{galaxy}_fit_func.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
+    plt.close()
+    
+    csv_name = f'{galaxy}_fit_funct.csv'
+    csv_path = f'{cwd}/{galaxy}/{csv_name}'
+    int_func_df.to_csv(csv_path,header=True,index=False)
+    
+    if len(int_func_df) != 0:
+        return csv_path
+    else:
+        print('No fitting functions were plotted')
+        return None
+
 
 def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
     
@@ -155,8 +297,7 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None):
                                       geometry.pa)  
         
         # Fiting the isophotes by using ellipses
-        fit_step = 0.01
-        #fit_step = 0.1
+        fit_step = 0.1
         ellipse = Ellipse(gal_img_fit, geometry)
         isolist = ellipse.fit_image(step=fit_step,
                                     minit=20,
@@ -381,7 +522,7 @@ def extract_data_hdr(best_file):
     
     return fit_par_list,fit_min_par
     
-def sersic_profile(r, I_e, R_e, n):
+def sersic_profile(r, n, R_e, I_e):
 
     b_n = 2 * n - 1 / 3 + 0.009876 / n
     I_r = I_e * np.exp(-b_n * ((r / R_e) ** (1 / n) - 1))
@@ -450,7 +591,7 @@ def main(gal_pos,galaxy):
     pos_ang = [105,0,180]
     
     # Ellipticity
-    ellip = [0.5,0,180]
+    ellip = [0.5,0.1,0.9]
     
     # Functions to decompose the profile
     funct_fit = ['Sersic',
@@ -462,9 +603,9 @@ def main(gal_pos,galaxy):
     ser_ind = [3,0.6,6]
     
     # Effective Raidus
-    rad_ef = [60,0,200]
+    rad_ef = [20,0,200]
     # Intensity at effective radius
-    int_ef = [120,0,200]
+    int_ef = [120,0,500]
     
     # EXPONENTIAL FUNCTION: Disk
     # Center intensity
@@ -551,7 +692,14 @@ def main(gal_pos,galaxy):
     
     best_parameters_name = 'bestfit_parameters_imfit.dat'
     best_parameters_path = f'{cwd}/{galaxy}/{best_parameters_name}'
-    fit_par_list,fit_min_par = extract_data_hdr(best_parameters_path)
+    fit_par_list,fit_min_par = extract_data_hdr(best_parameters_path)    
+    
+    sma_min = min(pd.read_csv(gal_iso_fit_csv_path)['sma'])
+    sma_max = max(pd.read_csv(gal_iso_fit_csv_path)['sma'])
+    sma_len = len(pd.read_csv(gal_iso_fit_csv_path)['sma'])
+    
+    int_func_csv_path = plot_fit_func(galaxy,fit_par_list,
+                                      rad_range=np.linspace(sma_min,sma_max,sma_len))
     
     # Instrumental pixel scale
     inst_arcsec_pix = df_sky_info.loc[galaxy_sky_index]['inst']
@@ -564,14 +712,24 @@ def main(gal_pos,galaxy):
     mod_iso_fit_csv_path = isophote_fitting(galaxy,fits_model_path,(x_center,y_center))
     
     # Comparing the data profile with the model profile
-    plot_list = [(gal_iso_fit_csv_path,'Data'),
-                 (mod_iso_fit_csv_path,'Model')]
+    plot_list = [(mod_iso_fit_csv_path,'Model'),
+                 (gal_iso_fit_csv_path,'Data')]
+    
     plot_profiles(galaxy,plot_list,'compar')
     plot_profiles(galaxy,plot_list,'compar',mag=True,cons=(inst_arcsec_pix,zcal))
+    
+    plot_list = [(int_func_csv_path,'func_df'),
+                 (mod_iso_fit_csv_path,'Model'),
+                 (gal_iso_fit_csv_path,'Data')]
+    
+    plot_profiles(galaxy,plot_list,'all',final_plot=True)
     
     plt.close()
 
 if __name__ == '__main__':
+    
+    # to compute the total time
+    start_time = time.time()
     
     cwd = os.getcwd()
     galaxy_original_folder = 'galaxy_files'
@@ -618,4 +776,11 @@ if __name__ == '__main__':
         
         print('There is no galaxies in the directory')
     
-    print('The analysis for all the galaxies is finished')
+    print('\nThe analysis for all the galaxies is finished')
+    
+    # Computing the required time
+    end_time = time.time()
+    total_time = end_time - start_time
+    print(f'Total computing time was {(total_time):1.2f} seconds\n') 
+    
+    print('\n#--------------------------------------------------#\n')    
