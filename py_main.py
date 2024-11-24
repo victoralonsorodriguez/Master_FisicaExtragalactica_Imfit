@@ -296,11 +296,6 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
     int_func_df = pd.DataFrame(columns=[])
     int_func_df['sma'] = rad_range
 
-    results_df = pd.DataFrame(columns=['galaxy'])
-    results_df['galaxy'] = galaxy
-    
-    
-    pdb.set_trace()
 
     for func_par in fit_par_list:
         
@@ -623,9 +618,24 @@ def fits_counts_to_mag(fits_path,inst,zcal):
 # Changing from counts to magnitudes
 def values_counts_to_mag(val_counts,inst,zcal):
     
-    val_counts[val_counts<=0]=1
-    val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
+    if isinstance(val_counts, (list,np.ndarray)):
+        
+        val_counts[val_counts<=0]=1
+        val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
+        
+    elif isinstance(val_counts, (int, float, np.float64)) and val_counts<0:
+
+        val_counts = 0
+        val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
     
+    elif isinstance(val_counts, (int, float, np.float64)) and val_counts>0:
+
+        val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
+        
+    else:
+        print(type(val_counts))
+        print('No valid value')
+
     return val_mag
 
 def values_mag_to_counts(val_mag,inst,zcal):
@@ -761,9 +771,14 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
 
     return fits_psf_norm_path
 
-def extract_data_hdr(best_file):
+def extract_data_hdr(galaxy,best_file,cons):
 
     fit_par_list = []
+    results_df = pd.DataFrame(columns=['galaxy'])
+    
+    new_row = {col: (galaxy if col == 'galaxy' else np.nan) for col in results_df.columns}
+    results_df.loc[len(results_df)] = new_row
+    
     with open(best_file, "r+b") as f:
         map_file = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
         for line in iter(map_file.readline, b''):
@@ -784,7 +799,74 @@ def extract_data_hdr(best_file):
                 val = float(match.group(2)) 
                 err = float(match.group(3))  
                 fit_par_list[func_index].append((par, val, err))
-            
+                
+                if fit_par_list[func_index][0] == 'Center':
+                    extra_str = '_cen'
+                elif fit_par_list[func_index][0] == 'Sersic':
+                    extra_str = '_ser'
+                elif fit_par_list[func_index][0] == 'Exponential':
+                    extra_str = '_exp'
+
+                if len(results_df.index) != 1:
+                    
+                    if par == 'I_e' or par == 'I_0':
+                    
+                        val_mag = values_counts_to_mag(val,cons[0],cons[1])
+                        err_mag = values_counts_to_mag(err,cons[0],cons[1])
+                        
+                        results_df[f'{par}{extra_str}_counts'].iloc[-1] = val
+                        results_df[f'{par}{extra_str}_mag'].iloc[-1] = val_mag
+                        
+                        results_df[f'{par}_err{extra_str}_counts'].iloc[-1] = err
+                        results_df[f'{par}_err{extra_str}_mag'].iloc[-1] = err_mag
+                        
+                    elif par == 'r_e' or par == 'h':
+                        
+                        val_kpc = px_to_kpc(val,cons[0])
+                        err_kpc = px_to_kpc(err,cons[0])
+                        
+                        results_df[f'{par}{extra_str}_pix'].iloc[-1] = val
+                        results_df[f'{par}{extra_str}_kpc'].iloc[-1] = val_kpc
+                        
+                        results_df[f'{par}_err{extra_str}_pix'].iloc[-1] = err
+                        results_df[f'{par}_err{extra_str}_kpc'].iloc[-1] = err_kpc
+                    
+                    else:
+                        
+                        results_df[f'{par}{extra_str}'].iloc[-1] = val
+                        results_df[f'{par}_err{extra_str}'].iloc[-1] = err
+                        
+                else:
+                    
+                    if par == 'I_e' or par == 'I_0':
+                    
+                        val_mag = values_counts_to_mag(val,cons[0],cons[1])
+                        err_mag = values_counts_to_mag(err,cons[0],cons[1])
+                        
+                        results_df[f'{par}{extra_str}_counts'] = val
+                        results_df[f'{par}{extra_str}_mag'] = val_mag
+                        
+                        results_df[f'{par}_err{extra_str}_counts'] = err
+                        results_df[f'{par}_err{extra_str}_mag'] = err_mag
+                        
+                    elif par == 'r_e' or par == 'h':
+                        
+                        val_kpc = px_to_kpc(val,cons[0])
+                        err_kpc = px_to_kpc(err,cons[0])
+                        
+                        results_df[f'{par}{extra_str}_pix'] = val
+                        results_df[f'{par}{extra_str}_kpc'] = val_kpc
+                        
+                        results_df[f'{par}_err{extra_str}_pix'] = err
+                        results_df[f'{par}_err{extra_str}_kpc'] = err_kpc
+                    
+                    
+                    else:
+                        
+                        results_df[f'{par}{extra_str}'] = val
+                        results_df[f'{par}_err{extra_str}'] = err
+                        
+                
             elif re.findall(br'FUNCTION\b', line):
                 func_index += 1        
         
@@ -804,7 +886,21 @@ def extract_data_hdr(best_file):
                 if match:
                     fit_min_par[key] = float(match.group(1)) 
     
-    return fit_par_list,fit_min_par
+                    if len(results_df.index) != 1:
+                    
+                        results_df[f'{key}'].iloc[-1] = round(fit_min_par[key],3)
+
+                    else:
+                    
+                        results_df[f'{key}'] = round(fit_min_par[key],3)
+        
+    
+    
+    csv_name = f'{galaxy}_i_results.csv'
+    csv_path = f'{cwd}/{galaxy}/{csv_name}'
+    results_df.to_csv(csv_path,header=True,index=False)
+    
+    return fit_par_list,fit_min_par,csv_path
     
 def sersic_profile(r, n, R_e, I_e):
 
@@ -958,9 +1054,10 @@ def initial_conditions(df, x_col, y_col,y_err_col):
 
     return break_pos, I_0_disk, h_disk, n_bul, r_e_bul, I_e_bul
 
-def integrate_luminosity(galaxy,func_csv_path):
+def integrate_luminosity(galaxy,func_csv_path,fit_par_csv_path,cons):
     
     fit_func_df = pd.read_csv(func_csv_path)
+    results_df = pd.read_csv(fit_par_csv_path)
     
     results = {}
     x_data = fit_func_df['sma']
@@ -977,11 +1074,34 @@ def integrate_luminosity(galaxy,func_csv_path):
             if col != 'Total_int':
                 
                 tot_int = results['Total_int']
-                rat = val / tot_int * 100
+                tot_int_mag = values_counts_to_mag(tot_int,cons[0],cons[1])
+                val_mag = values_counts_to_mag(val,cons[0],cons[1])
+                
+                rat = val / tot_int 
                 
                 print(f'{col}: {val:.2f} / {tot_int:.2f} = {rat:.2f}%\n')
-    
-    return results
+                
+                if col == 'Sersic':
+                    rat_str = 'B/T'
+                elif col == 'Exponential':
+                    rat_str = 'D/T'
+                
+                if len(results_df.index) != 1:
+                    
+                    results_df[f'Total_lum'].iloc[-1] = round(tot_int,3)
+                    results_df[f'{col}_lum_counts'].iloc[-1] = round(val,3)
+                    results_df[f'{col}_lum_mag'].iloc[-1] = round(val_mag,3)
+                    results_df[f'{rat_str}'].iloc[-1] = round(rat,3)
+
+                else:
+                    
+                    results_df[f'Total_lum'] = round(tot_int,3)
+                    results_df[f'{col}_lum_counts'] = round(val,3)
+                    results_df[f'{col}_lum_mag'] = round(val_mag,3)
+                    results_df[f'{rat_str}'] = round(rat,3)
+
+    results_df.to_csv(fit_par_csv_path,header=True,index=False)
+
 
 
 '''#-------------MAIN FUNCTION-------------'''
@@ -1190,7 +1310,8 @@ def main(gal_pos,galaxy):
     
     best_parameters_name = 'bestfit_parameters_imfit.dat'
     best_parameters_path = f'{cwd}/{galaxy}/{best_parameters_name}'
-    fit_par_list,fit_min_par = extract_data_hdr(best_parameters_path)    
+    fit_par_list,fit_min_par,fit_par_csv_path = extract_data_hdr(galaxy,best_parameters_path,
+                                                                 cons=(inst_arcsec_pix,zcal))    
     
     sma_min = min(pd.read_csv(gal_iso_fit_csv_path)['sma'])
     sma_max = max(pd.read_csv(gal_iso_fit_csv_path)['sma'])
@@ -1199,7 +1320,7 @@ def main(gal_pos,galaxy):
     int_func_csv_path = plot_fit_func(galaxy,fit_par_list,
                                       rad_range=np.linspace(sma_min,sma_max,sma_len))
     
-    integrate_luminosity(galaxy,int_func_csv_path)
+    integrate_luminosity(galaxy,int_func_csv_path,fit_par_csv_path,cons=(inst_arcsec_pix,zcal))
 
     # Creating a residual image in magnitudes as observed data (mag) - model (mag)
     
@@ -1236,8 +1357,9 @@ def main(gal_pos,galaxy):
                  (gal_iso_fit_csv_path,'Original Data')]
     
     plot_profiles(galaxy,plot_list,'all',cons=(inst_arcsec_pix,zcal),final_plot=True)
-    
     plt.close()
+    
+    return fit_par_csv_path
 
 if __name__ == '__main__':
     
@@ -1281,7 +1403,7 @@ if __name__ == '__main__':
             
             print(f'\nAnalyzing the galaxy {galaxy}\n')
             
-            main(gal_pos,galaxy)    
+            results_fit_csv_path = main(gal_pos,galaxy)    
             
             print('\n#-------------------------#\n')    
 
@@ -1294,6 +1416,17 @@ if __name__ == '__main__':
     # Computing the required time
     end_time = time.time()
     total_time = end_time - start_time
+    
+    
+    results_df = pd.read_csv(results_fit_csv_path)
+    if len(results_df.index) != 1:
+        results_df[f'Total_time_sec'].iloc[-1] = round(total_time,2)
+    else:    
+        results_df[f'Total_time_sec'] = round(total_time,2)
+
+    results_df.to_csv(results_fit_csv_path,header=True,index=False)
+    
+    
     print(f'Total computing time was {(total_time//60):.2f} minutes and {(total_time%60):.2f} seconds\n') 
     
     print('\n#--------------------------------------------------#\n')    
