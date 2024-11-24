@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
+from scipy.integrate import simps
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
@@ -42,7 +43,6 @@ def open_fits(fits_path):
     img = hdu[0].data
     
     return (hdr,img,fits_name)
-
 
 def plot_profiles(galaxy,csv_path_list,fig_name,
                   cons=None,final_plot=False):
@@ -295,6 +295,12 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
 
     int_func_df = pd.DataFrame(columns=[])
     int_func_df['sma'] = rad_range
+
+    results_df = pd.DataFrame(columns=['galaxy'])
+    results_df['galaxy'] = galaxy
+    
+    
+    pdb.set_trace()
 
     for func_par in fit_par_list:
         
@@ -678,7 +684,7 @@ def galaxy_index(df_info,galaxy):
 
 def create_psf(fits_path,galaxy,df_sky,df_psf):
     
-    print('Creating a PSF')
+    print('\nCreating a PSF')
     
     # Open the fits with Astropy
     hdr,img,fits_name = open_fits(fits_path)
@@ -952,10 +958,30 @@ def initial_conditions(df, x_col, y_col,y_err_col):
 
     return break_pos, I_0_disk, h_disk, n_bul, r_e_bul, I_e_bul
 
+def integrate_luminosity(galaxy,func_csv_path):
+    
+    fit_func_df = pd.read_csv(func_csv_path)
+    
+    results = {}
+    x_data = fit_func_df['sma']
+    
+    for column in fit_func_df.columns:
+        if column != 'sma':
+            y_data = fit_func_df[column]
 
-
-
-
+            integral = simps(y_data, x=x_data)
+            results[column] = integral
+    
+    if len(results) != 1:
+        for col, val in results.items():
+            if col != 'Total_int':
+                
+                tot_int = results['Total_int']
+                rat = val / tot_int * 100
+                
+                print(f'{col}: {val:.2f} / {tot_int:.2f} = {rat:.2f}%\n')
+    
+    return results
 
 
 '''#-------------MAIN FUNCTION-------------'''
@@ -1142,8 +1168,6 @@ def main(gal_pos,galaxy):
     # Output files
     residual_model_name = f'{fits_name}_model_residual_counts.fits'
     residual_model_path = f'{galaxy_folder_path}/{residual_model_name}'
-
-
     
     # Changing the directory to run imfit
     os.chdir(f'{galaxy}')
@@ -1175,8 +1199,8 @@ def main(gal_pos,galaxy):
     int_func_csv_path = plot_fit_func(galaxy,fit_par_list,
                                       rad_range=np.linspace(sma_min,sma_max,sma_len))
     
-    
-    
+    integrate_luminosity(galaxy,int_func_csv_path)
+
     # Creating a residual image in magnitudes as observed data (mag) - model (mag)
     
     # Original data from counts to mangitudes
@@ -1188,7 +1212,7 @@ def main(gal_pos,galaxy):
     _,img_mod_mag,_ = open_fits(img_mod_mag_path)
     
     img_res_mag = img_gal_mag - img_mod_mag
-    img_res_mag_name = f'{galaxy}_i_model_resiudual_mag.fits'
+    img_res_mag_name = f'{galaxy}_i_model_residual_mag.fits'
     img_res_mag_path = f'{cwd}/{galaxy}/{img_res_mag_name}'
     fits.writeto(f'{img_res_mag_path}',img_res_mag,header=hdr_gal_mag,overwrite=True)
     
@@ -1200,10 +1224,6 @@ def main(gal_pos,galaxy):
                                             (x_center,y_center),
                                             cons=(inst_arcsec_pix,zcal))
     
-
-
-    
-
     
     # Comparing the data profile with the model profile
     plot_list = [(mod_iso_fit_csv_path,'Model'),
