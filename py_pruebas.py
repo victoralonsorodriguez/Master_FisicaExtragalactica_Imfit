@@ -238,7 +238,7 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
                                                functools.partial(kpc_to_px,inst=cons[0])))
         
         px_ticks = ax.get_xticks()
-        arcsec_ticks = px_to_kpc(px_ticks)
+        arcsec_ticks = px_to_kpc(px_ticks,inst=cons[0])
         axxtop.set_xticks(arcsec_ticks)
         
         axxtop.minorticks_on()
@@ -266,6 +266,7 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
             counts_ticks = ax.get_yticks()
             mag_ticks = values_counts_to_mag(counts_ticks,inst=cons[0],zcal=cons[1])
             axyrig.set_yticks(mag_ticks)
+            
             axyrig.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
             axyrig.yaxis.set_minor_formatter(plt.NullFormatter())
             

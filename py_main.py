@@ -6,6 +6,7 @@ from scipy.optimize import curve_fit
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import functools
 
 from astropy.io import fits
@@ -384,8 +385,7 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
         print('No fitting functions were plotted')
         return None
 
-
-def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None):
+def plot_images(gal_img,fig_name,cons,ellip=False,isolist=None):
     
     # Enable LaTeX rendering
     plt.rc('text', usetex=True)
@@ -404,13 +404,92 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
                 \DeclareSIUnit{\cts}{cts}
                 '''
     
+    gal_img_mag = values_counts_to_mag(gal_img,cons[0],cons[1])
+    
+    x_len = gal_img_mag.shape[1]
+    y_len = gal_img_mag.shape[0]
+    
+    fig = plt.figure(figsize=(10,5))
+    ax = plt.subplot(1,1,1)
+    im = ax.imshow(gal_img_mag, origin='lower',cmap='viridis_r')
+    plt.colorbar(im, pad=0.11)
+    fig.axes[1].invert_yaxis()
+    fig.axes[1].set(ylabel=r'$\mu\ [\mathrm{mag/arcsec^2}]$')
+    fig.axes[1].minorticks_on()
+    
+    if ellip == True:
+    
+        smas = np.linspace(10, 200, 20)
+        for sma in smas:
+            iso = isolist.get_closest(sma)
+            x, y, = iso.sampled_coordinates()
+            plt.plot(x, y, color='white',linewidth=0.5)
+    
+    # Customizing the plots       
+    # X bottom axis is common
+    ax.set_xlabel(r'$X\ dimension\ [\mathrm{pix}]$')
+    
+    ax.set_xticks(np.linspace(0, x_len, 7))
+    ax.minorticks_on()
+    ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    
+    #ax.grid(True,alpha=0.2)
+    
+    # TOP X axis is common
+    axxtop = ax.secondary_xaxis('top',
+                                functions=(functools.partial(px_to_kpc,inst=cons[0]),
+                                           functools.partial(kpc_to_px,inst=cons[0])))
+    
+    px_ticks = ax.get_xticks()
+    arcsec_ticks = px_to_kpc(px_ticks,inst=cons[0])
+    axxtop.set_xticks(arcsec_ticks)
+    
+    axxtop.minorticks_on()
+    
+    axxtop.set_xlabel(r'$X\ dimension\ [\mathrm{kpc}]$',labelpad=8)
+    axxtop.tick_params(axis='x', which='major')
+    
+    # Y left axis
+    ax.set_ylabel(r'$Y\ dimension\ [\mathrm{pix}]$')
+    ax.set_yticks(np.linspace(0, y_len, 7))
+    
+    ax.minorticks_on()
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    
+    # Y right axis
+    
+    axyrig = ax.secondary_yaxis('right',
+                                functions=(functools.partial(px_to_kpc,inst=cons[0]),
+                                           functools.partial(kpc_to_px,inst=cons[0])))
+    
+    px_ticks = ax.get_yticks()
+    arcsec_ticks = px_to_kpc(px_ticks,inst=cons[0])
+    axyrig.set_yticks(arcsec_ticks)
+    
+    axyrig.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    axyrig.yaxis.set_minor_formatter(plt.NullFormatter())
+    
+    axyrig.minorticks_on()
+    
+    axyrig.set_ylabel(r'$Y\ dimension\ [\mathrm{kpc}]$')
+    axyrig.tick_params(axis='y', which='major')
+
+    
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', dpi=1000, bbox_inches='tight')
+    plt.close()
+
+def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None):
+    
     print('Performing the isophote fitting\n')
     
     # Loading the galaxy image
     _,gal_img,gal_img_name = open_fits(img_gal_path)
+    
     gal_img_fit = gal_img
+    
+    # Original image
     gal_img_log_or = np.log10(gal_img_fit)
-    gal_img_log = np.log10(gal_img_fit)
     
     # Loading the mask if it is required
     if img_mask_path != None:
@@ -423,19 +502,10 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
         img_gal_mask = np.ma.masked_array(gal_img, mask=mask_img)
         gal_img_fit = img_gal_mask
     
-
-    # Logaritmic data to show details
-    gal_img_log = np.log10(gal_img_fit)
-    
-    fig, (ax1) = plt.subplots(figsize=(14, 5), nrows=1, ncols=1)
-    fig.subplots_adjust(left=0.04, right=0.98, bottom=0.02, top=0.98)
-    ax1.imshow(gal_img_log, origin='lower')
-    plt.colorbar()
-    fig.axes[1].set(ylabel=r'$Intensity\ \mathrm{counts}$')
     
     fig_name = f'{gal_img_name}_image_analyze.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', dpi=1000, bbox_inches='tight')
+    plot_images(gal_img_fit,fig_name,cons=cons)
+    
     
     # While loop beacuse we don't want to fix ellipse initial conditions
     # So the loop is active until the programe converges
@@ -456,7 +526,7 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
         
         # Fiting the isophotes by using ellipses
         fit_step = 0.1
-        fit_step = 0.01
+        #fit_step = 0.01
         ellipse = Ellipse(gal_img_fit, geometry)
         isolist = ellipse.fit_image(step=fit_step,
                                     minit=20,
@@ -487,22 +557,9 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
         plot_list = [(isophote_table_path,'Model')]
         plot_profiles(galaxy,plot_list,'i_model',cons=cons)
     
-    fig, (ax1) = plt.subplots(figsize=(14, 5), nrows=1, ncols=1)
-    fig.subplots_adjust(left=0.04, right=0.98, bottom=0.02, top=0.98)
-    ax1.imshow(gal_img_log_or, origin='lower')
-    
-    
-    
-    smas = np.linspace(10, 200, 20)
-    for sma in smas:
-        iso = isolist.get_closest(sma)
-        x, y, = iso.sampled_coordinates()
-        ax1.plot(x, y, color='white',linewidth=0.5)
     
     fig_name = f'{gal_img_name}_ellipses.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
-    plt.close()
+    plot_images(gal_img,fig_name,cons=cons,ellip=True,isolist=isolist)
     
     return isophote_table_path
 
@@ -539,11 +596,12 @@ def fits_counts_to_mag(fits_path,inst,zcal):
     hdr_flux,img_flux,fits_name = open_fits(fits_path)
 
     # Flux from counts to mag/arcsec^2
+    img_flux[img_flux<=0] = 1
     fits_mag_img = -2.5*np.log10(img_flux) - 2.5 * np.log10(inst**2) - zcal
     
     # Expoting the new fits
     fits_name = fits_name.split('counts')[0]
-    fits_mag_name  = f'{fits_name}mag.fits'
+    fits_mag_name  = f'{fits_name}_mag.fits'
     fits_mag_path = f'{cwd}/{galaxy}/{fits_mag_name}'
     fits.writeto(f'{fits_mag_path}', fits_mag_img, header=hdr_flux, overwrite=True)
     
@@ -551,6 +609,8 @@ def fits_counts_to_mag(fits_path,inst,zcal):
 
 # Changing from counts to magnitudes
 def values_counts_to_mag(val_counts,inst,zcal):
+    
+    val_counts[val_counts<=0]=1
     val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
     
     return val_mag
@@ -1073,6 +1133,7 @@ def main(gal_pos,galaxy):
     residual_model_name = f'{fits_name}_model_residual_counts.fits'
     residual_model_path = f'{galaxy_folder_path}/{residual_model_name}'
 
+
     
     # Changing the directory to run imfit
     os.chdir(f'{galaxy}')
@@ -1104,11 +1165,21 @@ def main(gal_pos,galaxy):
     int_func_csv_path = plot_fit_func(galaxy,fit_par_list,
                                       rad_range=np.linspace(sma_min,sma_max,sma_len))
     
-    fits_model_mag_path = fits_counts_to_mag(fits_model_path,inst_arcsec_pix,zcal)
+    fits_resid_mag_path = fits_counts_to_mag(residual_model_path,inst_arcsec_pix,zcal)
+
+    _,res_mod_mag,_ = open_fits(fits_resid_mag_path)
+    
+    img_res_mag_name = f'{galaxy}_i_model_residual_mag.pdf'
+    plot_images(res_mod_mag,img_res_mag_name,cons=(inst_arcsec_pix,zcal),ellip=False,isolist=None)
     
     mod_iso_fit_csv_path = isophote_fitting(galaxy,fits_model_path,
                                             (x_center,y_center),
                                             cons=(inst_arcsec_pix,zcal))
+    
+
+
+    
+
     
     # Comparing the data profile with the model profile
     plot_list = [(mod_iso_fit_csv_path,'Model'),
