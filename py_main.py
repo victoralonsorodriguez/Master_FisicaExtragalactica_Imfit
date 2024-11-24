@@ -385,7 +385,8 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
         print('No fitting functions were plotted')
         return None
 
-def plot_images(gal_img,fig_name,cons,ellip=False,isolist=None):
+def plot_images(gal_img,fig_name,cons,
+                ellip=False,isolist=None,mag=False,res=False):
     
     # Enable LaTeX rendering
     plt.rc('text', usetex=True)
@@ -404,14 +405,20 @@ def plot_images(gal_img,fig_name,cons,ellip=False,isolist=None):
                 \DeclareSIUnit{\cts}{cts}
                 '''
     
-    gal_img_mag = values_counts_to_mag(gal_img,cons[0],cons[1])
+    gal_img_mag = gal_img
+    if mag==False:
+        gal_img_mag = values_counts_to_mag(gal_img,cons[0],cons[1])
     
     x_len = gal_img_mag.shape[1]
     y_len = gal_img_mag.shape[0]
     
     fig = plt.figure(figsize=(10,5))
     ax = plt.subplot(1,1,1)
-    im = ax.imshow(gal_img_mag, origin='lower',cmap='viridis_r')
+    if res == True:
+        im = ax.imshow(gal_img_mag, origin='lower',cmap='viridis_r',
+                       vmin=-1,vmax=1)
+    else: 
+        im = ax.imshow(gal_img_mag, origin='lower',cmap='viridis_r')
     plt.colorbar(im, pad=0.11)
     fig.axes[1].invert_yaxis()
     fig.axes[1].set(ylabel=r'$\mu\ [\mathrm{mag/arcsec^2}]$')
@@ -961,12 +968,21 @@ def main(gal_pos,galaxy):
     # Position of the galaxy in the sky info dataframe
     galaxy_sky_index = galaxy_index(df_sky_info,galaxy)
     
+    # Instrumental pixel scale
+    inst_arcsec_pix = df_sky_info.loc[galaxy_sky_index]['inst']
+    
+    # Calibration constant
+    zcal = df_sky_info.loc[galaxy_sky_index]['zcal']
+    
     # Fits file to analyze
     fits_file = fits_image_list[gal_pos]
     fits_path = f'{files_path}/{fits_file}'
     
     # Opening the galaxy image 
     hdr_gal,img_gal,fits_name = open_fits(fits_path)
+    
+    fig_name = f'{fits_name}.pdf'
+    plot_images(img_gal,fig_name,cons=(inst_arcsec_pix,zcal))
 
     # obtaining the shape of the fits
     x_len = img_gal.shape[1]
@@ -1005,12 +1021,6 @@ def main(gal_pos,galaxy):
 
     # How much deviation we allow for the center
     center_dev = 1
-    
-    # Instrumental pixel scale
-    inst_arcsec_pix = df_sky_info.loc[galaxy_sky_index]['inst']
-    
-    # Calibration constant
-    zcal = df_sky_info.loc[galaxy_sky_index]['zcal']
     
     # Initial conditions derivied from a elliptical fitting
     gal_iso_fit_csv_path = isophote_fitting(galaxy,fits_path,
@@ -1165,12 +1175,26 @@ def main(gal_pos,galaxy):
     int_func_csv_path = plot_fit_func(galaxy,fit_par_list,
                                       rad_range=np.linspace(sma_min,sma_max,sma_len))
     
-    fits_resid_mag_path = fits_counts_to_mag(residual_model_path,inst_arcsec_pix,zcal)
-
-    _,res_mod_mag,_ = open_fits(fits_resid_mag_path)
+    
+    
+    # Creating a residual image in magnitudes as observed data (mag) - model (mag)
+    
+    # Original data from counts to mangitudes
+    img_gal_mag_path = fits_counts_to_mag(fits_path,inst_arcsec_pix,zcal)
+    hdr_gal_mag,img_gal_mag,_ = open_fits(img_gal_mag_path)
+    
+    # Model from counts to mangitudes
+    img_mod_mag_path = fits_counts_to_mag(fits_model_path,inst_arcsec_pix,zcal)
+    _,img_mod_mag,_ = open_fits(img_mod_mag_path)
+    
+    img_res_mag = img_gal_mag - img_mod_mag
+    img_res_mag_name = f'{galaxy}_i_model_resiudual_mag.fits'
+    img_res_mag_path = f'{cwd}/{galaxy}/{img_res_mag_name}'
+    fits.writeto(f'{img_res_mag_path}',img_res_mag,header=hdr_gal_mag,overwrite=True)
     
     img_res_mag_name = f'{galaxy}_i_model_residual_mag.pdf'
-    plot_images(res_mod_mag,img_res_mag_name,cons=(inst_arcsec_pix,zcal),ellip=False,isolist=None)
+    plot_images(img_res_mag,img_res_mag_name,cons=(inst_arcsec_pix,zcal),mag=True,res=True)
+    
     
     mod_iso_fit_csv_path = isophote_fitting(galaxy,fits_model_path,
                                             (x_center,y_center),
