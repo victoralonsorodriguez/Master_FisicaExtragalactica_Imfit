@@ -1,0 +1,14 @@
+# Configuration file for the galaxy NGC0237
+X0    191    190,192
+Y0    157    156,158
+FUNCTION Sersic
+PA    105    0,180
+ell    0.5    0.1,0.9
+n    3    0.6,6
+I_e    120    0,500
+r_e    20    0,200
+FUNCTION Exponential
+PA    105    0,180
+ell    0.5    0.1,0.9
+I_0    1935.5469970703125    0,2419.4337463378906
+h    80    0,200

@@ -1,0 +1,14 @@
+# Configuration file for the galaxy NGC6132
+X0    186    185,187
+Y0    267    266,268
+FUNCTION Sersic
+PA    105    0,180
+ell    0.5    0.1,0.9
+n    3    0.6,6
+I_e    120    0,500
+r_e    20    0,200
+FUNCTION Exponential
+PA    105    0,180
+ell    0.5    0.1,0.9
+I_0    1155.81494140625    0,1444.7686767578125
+h    80    0,200

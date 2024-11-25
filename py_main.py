@@ -33,6 +33,7 @@ from photutils.isophote import EllipseGeometry
 from photutils.aperture import EllipticalAperture
 from photutils.isophote import Ellipse
 
+'''#-------------NEEDED FUNCTIONS-------------'''
 
 def open_fits(fits_path):
     
@@ -436,6 +437,7 @@ def plot_images(gal_img,fig_name,cons,
     # Customizing the plots       
     # X bottom axis is common
     ax.set_xlabel(r'$X\ dimension\ [\mathrm{pix}]$')
+    ax.set_xlim(left=0.0)
     
     ax.set_xticks(np.linspace(0, x_len, 7))
     ax.minorticks_on()
@@ -521,10 +523,12 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
     pa_ind = 0
     while len(isophote_table) == 0:
         # Defining a elliptical geometry
-        pa_range = np.linspace(20,160,50)
+        pa_range = np.linspace(5,175,60)
+        print(f'Atempting to converge with PA={pa_range[pa_ind]:.2f} deg')
+        
         geometry = EllipseGeometry(x0=gal_center[0], y0=gal_center[1],
                                    sma=50, # semimajor axis in pixels
-                                   eps=0.8,
+                                   eps=0.5,
                                    pa=pa_range[pa_ind] * np.pi / 180.0) # position angle in radians
         
         aperture = EllipticalAperture((geometry.x0, geometry.y0),
@@ -533,21 +537,23 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
                                       geometry.pa)  
         
         # Fiting the isophotes by using ellipses
+
         fit_step = 0.1
         #fit_step = 0.01
         ellipse = Ellipse(gal_img_fit, geometry)
         isolist = ellipse.fit_image(step=fit_step,
-                                    minit=20,
-                                    sclip=2,
-                                    nclip=10,
+                                    minit=30,
+                                    #sclip=2,
+                                    #nclip=10,
                                     fix_center=True,
-                                    fflag=0.5)
+                                    #fflag=0.5
+                                    )
         
         # We can generate a table with the results
         isophote_table = isolist.to_table()
         
         pa_ind += 1
-        
+
         if pa_ind == len(pa_range):
             print('Isophote fitting cannot converge')
             break
@@ -623,69 +629,82 @@ def values_counts_to_mag(val_counts,inst,zcal):
         val_counts[val_counts<=0]=1
         val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
         
-    elif isinstance(val_counts, (int, float, np.float64)) and val_counts<0:
+    elif isinstance(val_counts, (int, float, np.float64)) and (val_counts<0 or np.isnan(val_counts)):
 
-        val_counts = 0
+        val_counts = 1
         val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
     
-    elif isinstance(val_counts, (int, float, np.float64)) and val_counts>0:
+    elif isinstance(val_counts, (int, float, np.float64)) and val_counts>=0:
 
         val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
-        
+    
     else:
+        print(val_counts)
+        print(np.isnan(val_counts))
         print(type(val_counts))
         print('No valid value')
 
-    return val_mag
+    return round_number(val_mag,3)
+
+def round_number(num,dec):
+    
+    if isinstance(num, (int, float, np.float64)):
+        num = round(num,dec)
+    
+    return num
 
 def values_mag_to_counts(val_mag,inst,zcal):
     
     val_count = 10**((val_mag - 2.5*np.log10(inst**2)-zcal)/-2.5)
     
-    return val_count
+    return round_number(val_count,3)
 
 # Changing from pixeles to kpc 
 def px_to_kpc(px,inst):
 
     arcsec = px * inst 
     kpc = arcsec_to_kpc(arcsec)
-    return kpc
+
+    return round_number(kpc,3)
 
 def kpc_to_px(kpc,inst):
     
     arcsec = kpc_to_arcsec(kpc)
     px = arcsec / inst 
-    return px
+    
+    return round_number(px,3)
 
 def arcsec_to_kpc(arcsec):
     
     kpc = arcsec * 0.12
     
-    return kpc
+    return round_number(kpc,3)
+
 
 def kpc_to_arcsec(kpc):
     
     arcsec = kpc / (0.12)
     
-    return arcsec
+    return round_number(arcsec,3)
+
 
 # Changing from Ellipticity to Axis ratio
 def ell_to_axrat(ell):
     axrat = 1 - ell
-    return axrat
+    return round_number(axrat,3)
 
 def axrat_to_ell(axrat):
     ell = 1 - axrat
-    return ell
+    return round_number(ell,3)
 
 # Changing from degrees to radian
 def deg_to_rad(deg):
     rad = deg * (np.pi / 180)
-    return rad
+    return round_number(rad,3)
 
 def rad_to_deg(rad):
     deg = rad * (180 / np.pi)
-    return deg
+    return round_number(deg,3)
     
 def galaxy_index(df_info,galaxy):
 
@@ -1088,25 +1107,30 @@ def integrate_luminosity(galaxy,func_csv_path,fit_par_csv_path,cons):
                 
                 if len(results_df.index) != 1:
                     
-                    results_df[f'Total_lum'].iloc[-1] = round(tot_int,3)
-                    results_df[f'{col}_lum_counts'].iloc[-1] = round(val,3)
-                    results_df[f'{col}_lum_mag'].iloc[-1] = round(val_mag,3)
-                    results_df[f'{rat_str}'].iloc[-1] = round(rat,3)
+                    results_df[f'Total_lum_counts'].iloc[-1] = round_number(tot_int,3)
+                    results_df[f'Total_lum_mag'].iloc[-1] = round_number(tot_int_mag,3)
+                    results_df[f'{col}_lum_counts'].iloc[-1] = round_number(val,3)
+                    results_df[f'{col}_lum_mag'].iloc[-1] = round_number(val_mag,3)
+                    results_df[f'{rat_str}'].iloc[-1] = round_number(rat,3)
 
                 else:
                     
-                    results_df[f'Total_lum'] = round(tot_int,3)
-                    results_df[f'{col}_lum_counts'] = round(val,3)
-                    results_df[f'{col}_lum_mag'] = round(val_mag,3)
-                    results_df[f'{rat_str}'] = round(rat,3)
+                    results_df[f'Total_lum_counts'] =  round_number(tot_int,3)
+                    results_df[f'Total_lum_mag'] = round_number(tot_int_mag,3)
+                    results_df[f'{col}_lum_counts'] = round_number(val,3)
+                    results_df[f'{col}_lum_mag'] = round_number(val_mag,3)
+                    results_df[f'{rat_str}'] = round_number(rat,3)
 
     results_df.to_csv(fit_par_csv_path,header=True,index=False)
 
+    return fit_par_csv_path
 
 
 '''#-------------MAIN FUNCTION-------------'''
 
 def main(gal_pos,galaxy):
+    
+    start_time_gal = time.time()
     
     # Creating a folder for each galaxy
     galaxy_folder_path = create_galaxy_folder(galaxy)
@@ -1359,10 +1383,53 @@ def main(gal_pos,galaxy):
     plot_profiles(galaxy,plot_list,'all',cons=(inst_arcsec_pix,zcal),final_plot=True)
     plt.close()
     
-    return fit_par_csv_path
+    
+    end_time_gal = time.time()
+    gal_time = end_time_gal - start_time_gal
+    
+    
+    results_df = pd.read_csv(fit_par_csv_path)
+    
+    if len(results_df.index) != 1:
+        results_df[f'Total_time_sec'].iloc[-1] = round(gal_time,2)
+    else:    
+        results_df[f'Total_time_sec'] = round(gal_time,2)
+        
+    results_df.to_csv(fit_par_csv_path,header=True,index=False)
+    
+    results_global_csv_name = f'csv_results_global.csv'
+    results_global_csv_path = f'{cwd}/{results_global_csv_name}'
+
+    if results_global_csv_name not in os.listdir(cwd):
+        
+        results_global_df = pd.DataFrame(columns=results_df.columns)
+        results_global_df.loc[0] = results_df.loc[0]
+
+    else: 
+        
+        results_global_df = pd.read_csv(results_global_csv_path)
+        
+        if galaxy in results_global_df['galaxy'].values:
+            
+            print('This galaxy is already analized. Data will be overwritted')
+
+            gal_ind_val = galaxy_index(results_global_df,galaxy)
+            results_global_df.loc[gal_ind_val] = results_df.loc[0]
+            
+        else:
+            
+            print('Adding these results to global csv')
+            
+            results_global_df = pd.concat([results_global_df,results_df],
+                                          ignore_index=True)
+    results_global_df = results_global_df.sort_values(by='galaxy')
+    results_global_df.to_csv(results_global_csv_path,header=True,index=False)
+    
+
 
 if __name__ == '__main__':
     
+
     # to compute the total time
     start_time = time.time()
     
@@ -1403,7 +1470,7 @@ if __name__ == '__main__':
             
             print(f'\nAnalyzing the galaxy {galaxy}\n')
             
-            results_fit_csv_path = main(gal_pos,galaxy)    
+            main(gal_pos,galaxy)    
             
             print('\n#-------------------------#\n')    
 
@@ -1411,21 +1478,14 @@ if __name__ == '__main__':
         
         print('There is no galaxies in the directory')
     
-    print('\nThe analysis for all the galaxies is finished')
     
     # Computing the required time
     end_time = time.time()
     total_time = end_time - start_time
     
-    
-    results_df = pd.read_csv(results_fit_csv_path)
-    if len(results_df.index) != 1:
-        results_df[f'Total_time_sec'].iloc[-1] = round(total_time,2)
-    else:    
-        results_df[f'Total_time_sec'] = round(total_time,2)
 
-    results_df.to_csv(results_fit_csv_path,header=True,index=False)
     
+    print('\nThe analysis for all the galaxies is finished')
     
     print(f'Total computing time was {(total_time//60):.2f} minutes and {(total_time%60):.2f} seconds\n') 
     
