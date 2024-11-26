@@ -1,0 +1,14 @@
+# Configuration file for the galaxy NGC5772
+X0    341    340,342
+Y0    277    276,278
+FUNCTION Sersic
+PA    105    0,180
+ell    0.22656120809570005    0.05,0.95
+n    1.82    0.6,6
+I_e    840.531    0,1260.531
+r_e    8.474    0,200
+FUNCTION Exponential
+PA    105    0,180
+ell    0.462801078773027    0.05,0.95
+I_0    440.488    0,660.488
+h    37.225    0,200

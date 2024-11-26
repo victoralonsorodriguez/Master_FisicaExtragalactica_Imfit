@@ -1,0 +1,11 @@
+# Configuration file for creating a PSF fo the galaxy NGC3614
+NCOLS 243 # x-size
+NROWS 243 # y-size
+X0 122.0
+Y0 122.0
+FUNCTION Moffat
+PA    0
+ell    0 
+I_0    100   # Counts/pixel 
+fwhm    2.782 
+beta    11.884 

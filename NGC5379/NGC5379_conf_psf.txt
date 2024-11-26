@@ -1,0 +1,11 @@
+# Configuration file for creating a PSF fo the galaxy NGC5379
+NCOLS 195 # x-size
+NROWS 195 # y-size
+X0 98.0
+Y0 98.0
+FUNCTION Moffat
+PA    0
+ell    0 
+I_0    100   # Counts/pixel 
+fwhm    3.18 
+beta    14.394 

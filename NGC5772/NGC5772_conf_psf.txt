@@ -1,0 +1,11 @@
+# Configuration file for creating a PSF fo the galaxy NGC5772
+NCOLS 289 # x-size
+NROWS 289 # y-size
+X0 145.0
+Y0 145.0
+FUNCTION Moffat
+PA    0
+ell    0 
+I_0    100   # Counts/pixel 
+fwhm    1.54 
+beta    6.667 
