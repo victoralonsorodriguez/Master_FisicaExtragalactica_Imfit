@@ -1,0 +1,14 @@
+# Configuration file for the galaxy UGC09629
+X0    112    111,113
+Y0    147    146,148
+FUNCTION Sersic
+PA    105    0,180
+ell    0.30687709825029347    0.05,0.95
+n    0.787    0.6,6
+I_e    1084.998    0,1626.998
+r_e    6.07    0,200
+FUNCTION Exponential
+PA    105    0,180
+ell    0.6243556224857351    0.05,0.95
+I_0    174.803    0,261.803
+h    39.012    0,200

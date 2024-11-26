@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from scipy.integrate import simps
+from scipy.signal import deconvolve
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
@@ -33,7 +34,7 @@ from photutils.isophote import EllipseGeometry
 from photutils.aperture import EllipticalAperture
 from photutils.isophote import Ellipse
 
-'''#-------------NEEDED FUNCTIONS-------------'''
+'''#-------------NEEDED FUNCTIONS-------------#'''
 
 def open_fits(fits_path):
     
@@ -132,7 +133,7 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
                             
                             plt.plot(x,y,label=f'{result}',
                                     linewidth=1,color='black',
-                                    linestyle='-.',zorder=3)
+                                    linestyle='-.',zorder=4)
                             
                         else:
                             plt.scatter(x,y,label=col,
@@ -146,12 +147,11 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
                 x = csv_values_dict[plot_label]['sma'][:max_data_len]
                 y = csv_values_dict[plot_label][f'{prof}'][:max_data_len]
                 
-                
                 # Isohpohes pos angle is in rad so can be changed to deg
                 if profile_axis_label[prof_pos] == 'Position Angle [deg]':
-                    ang_deg_abs = y * 180 / np.pi
+                    angle_deg = rad_to_deg(y)
+                    angle_deg = angle_deg % 360
                     # Angles measured from x righ-hand axis
-                    angle_deg = ang_deg_abs % 360
                     y = [(ang+90) if (ang<90) 
                          else (ang-90) if (90<ang<270) 
                          else (ang-270) if (ang>270) 
@@ -163,13 +163,15 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
                 if min(y) < y_min:
                         y_min = min(y)
                 
+                z_order = 2
                 marker_size = 11
                 if plot_label == 'Model':
+                    z_order = 3
                     marker_size = 14
                 plt.scatter(x,y,label=plot_label,
                             marker=markers[color_index],s=marker_size,
                             linewidth=0.15,edgecolor='black',
-                            color=colors[color_index],zorder=2)
+                            color=colors[color_index],zorder=z_order)
                 color_index += 1
 
         if prof == 'intens':
@@ -272,7 +274,7 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
             
             deg_ticks = ax.get_yticks()
             rad_ticks = deg_to_rad(deg_ticks)
-            axyrig.set_yticks(rad_ticks)
+            axyrig.set_yticks(list(rad_ticks))
             axyrig.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
             axyrig.yaxis.set_minor_formatter(plt.NullFormatter())
             
@@ -388,7 +390,9 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
         return None
 
 def plot_images(gal_img,fig_name,cons,
-                ellip=False,isolist=None,mag=False,res=False):
+                path=False,
+                ellip=False,isolist=None,
+                mag=False,res=False):
     
     # Enable LaTeX rendering
     plt.rc('text', usetex=True)
@@ -407,9 +411,17 @@ def plot_images(gal_img,fig_name,cons,
                 \DeclareSIUnit{\cts}{cts}
                 '''
     
-    gal_img_mag = gal_img
+    if path == True:
+        
+        print('Path was passed to function to plot the image')
+        _,gal_img_mag,_ = open_fits(gal_img)
+        
+    else:
+            
+        gal_img_mag = gal_img
+        
     if mag==False:
-        gal_img_mag = values_counts_to_mag(gal_img,cons[0],cons[1])
+        gal_img_mag = values_counts_to_mag(gal_img_mag,cons[0],cons[1])
     
     x_len = gal_img_mag.shape[1]
     y_len = gal_img_mag.shape[0]
@@ -537,9 +549,10 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
                                       geometry.pa)  
         
         # Fiting the isophotes by using ellipses
-
         fit_step = 0.1
-        #fit_step = 0.01
+        if '-hr' in sys.argv:
+            fit_step = 0.01
+            
         ellipse = Ellipse(gal_img_fit, geometry)
         isolist = ellipse.fit_image(step=fit_step,
                                     minit=30,
@@ -629,12 +642,12 @@ def values_counts_to_mag(val_counts,inst,zcal):
         val_counts[val_counts<=0]=1
         val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
         
-    elif isinstance(val_counts, (int, float, np.float64)) and (val_counts<0 or np.isnan(val_counts)):
+    elif isinstance(val_counts, (int, float, np.float64)) and (val_counts<=0 or np.isnan(val_counts)):
 
         val_counts = 1
         val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
     
-    elif isinstance(val_counts, (int, float, np.float64)) and val_counts>=0:
+    elif isinstance(val_counts, (int, float, np.float64)) and val_counts>0:
 
         val_mag = -2.5*np.log10(val_counts) - 2.5 * np.log10(inst**2) - zcal
     
@@ -680,13 +693,11 @@ def arcsec_to_kpc(arcsec):
     
     return round_number(kpc,3)
 
-
 def kpc_to_arcsec(kpc):
     
     arcsec = kpc / (0.12)
     
     return round_number(arcsec,3)
-
 
 # Changing from Ellipticity to Axis ratio
 def ell_to_axrat(ell):
@@ -699,12 +710,24 @@ def axrat_to_ell(axrat):
 
 # Changing from degrees to radian
 def deg_to_rad(deg):
-    rad = deg * (np.pi / 180)
+    
+    #rad = (deg % 360) * (np.pi / 180)
+    rad = (deg) * (np.pi / 180)
+
     return round_number(rad,3)
 
 def rad_to_deg(rad):
-    deg = rad * (180 / np.pi)
+    
+    #deg = (rad % (2*np.pi)) * (180 / np.pi)
+    deg = (rad) * (180 / np.pi)
+        
     return round_number(deg,3)
+
+def deg_isopho_to_imfit(deg):
+    
+    
+    
+    pass
     
 def galaxy_index(df_info,galaxy):
 
@@ -713,7 +736,7 @@ def galaxy_index(df_info,galaxy):
 
 def create_psf(fits_path,galaxy,df_sky,df_psf):
     
-    print('\nCreating a PSF')
+    print('\nCreating a PSF\n')
     
     # Open the fits with Astropy
     hdr,img,fits_name = open_fits(fits_path)
@@ -751,8 +774,8 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
     beta_value_arcsec = df_psf.loc[galaxy_psf_index]['Beta_i']
     
     # Changing to pix
-    fwhm_value_pix = fwhm_value_arcsec / inst_arcsec_pix
-    beta_value_pix = beta_value_arcsec / inst_arcsec_pix
+    fwhm_value_pix = round(fwhm_value_arcsec / inst_arcsec_pix,3)
+    beta_value_pix = round(beta_value_arcsec / inst_arcsec_pix,3)
     
     # Creating the configuration script for the psf
     psf_conf_file_name = f'{galaxy}_conf_psf.txt'
@@ -771,9 +794,17 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
     fits_psf_name = f'{galaxy}_psf.fits'
     fits_psf_path = f'{cwd}/{galaxy}/{fits_psf_name}'
 
-    subprocess.run(['makeimage',
-                    psf_conf_file_path,
-                    '-o', fits_psf_path])
+    if '--imfit-nopath' in sys.argv:
+
+        subprocess.run(['./makeimage',
+                        psf_conf_file_path,
+                        '-o', fits_psf_path])
+        
+    else:
+        
+        subprocess.run(['makeimage',
+                        psf_conf_file_path,
+                        '-o', fits_psf_path])
     
     # Opening the psf to normalizate it
     hdr_psf,img_psf,fits_name = open_fits(fits_psf_path)
@@ -921,6 +952,8 @@ def extract_data_hdr(galaxy,best_file,cons):
     
     return fit_par_list,fit_min_par,csv_path
     
+'''#-----ANALYTICAL FUNCTIONS-----#'''
+
 def sersic_profile(r, n, R_e, I_e):
 
     b_n = 2 * n - 1 / 3 + 0.009876 / n
@@ -972,7 +1005,7 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     y_err_dos = np.log(df[y_err_col].values)
     
     # Estimaciones iniciales para los parámetros: a1, b1, a2, b2, x_break
-    initial_guess_dos = [1, 0, -1, 0, np.mean(x_data_dos)]
+    initial_guess_dos = [1, 0, -1, 0, max(x_data_dos) * (1/3)]
     
     # Ajustar el modelo
     popt_dos, pcov_dos = curve_fit(two_line_model, x_data_dos, y_data_dos, p0=initial_guess_dos,sigma=y_err_dos)
@@ -996,6 +1029,8 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.scatter(x_data_dos, y_data_dos, label='Datos', color='black', s=10)
     plt.plot(x_data_dos, y_fit_dos, label=f'Ajuste: Dos líneas con x_break = {x_break_dos:.2f}', color='blue', lw=2)
     
+     
+    
     # Añadir líneas ajustadas por separado
     break_pos = list(x_data_dos).index(min(x_data_dos[x_data_dos >= x_break_dos]))
     print(f'X break point pos: {break_pos}')
@@ -1012,6 +1047,10 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.legend()
     plt.grid(True)
     
+    fig_name = f'{galaxy}_lines_fitting_00.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')   
+    
     # SEGUNDA ETAPA: AJUSTE DEL DISCO
     print(f'\nDisco')
     # Nwe fittin
@@ -1022,7 +1061,8 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     initial_guess_disk = [-1, np.mean(x_data_disk)]
     
     # Ajustar el modelo
-    popt_disk, pcov_disk = curve_fit(exponential_disk_linear, x_data_disk, y_data_disk, p0=initial_guess_disk,sigma=y_err_disk)
+    popt_disk, pcov_disk = curve_fit(exponential_disk_linear, x_data_disk, y_data_disk, 
+                                     p0=initial_guess_disk,sigma=y_err_disk,nan_policy='omit')
     m_disk, b_disk = popt_disk
     
     I_0_disk = np.exp(b_disk)
@@ -1038,6 +1078,10 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.plot(x_data_disk,y_fit_disk,color='gold')
     plt.scatter(x_data_disk, y_data_disk, label='Datos', color='black', s=10)
     
+    fig_name = f'{galaxy}_lines_fitting_01_disk.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')   
+    
     chi_squared_disk = calculate_chi_squared(x_data_disk, y_data_disk, y_err_disk, exponential_disk_linear, popt_disk)
     print(f"Chi^2 disk: {chi_squared_disk}")
     
@@ -1045,11 +1089,18 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     # TERCERA ETAPA: AJUSTE DEL BULBO
     print(f'\nBulbo log')
     # Nwe fittin
-    x_data_bul = df[x_col].values[:break_pos]
-    y_data_bul = np.log(df[y_col].values[:break_pos])
-    y_err_bul = np.log(df[y_err_col].values[:break_pos])
+    break_pos_bul = int(break_pos * 2/3)
+    x_data_bul = df[x_col].values[:break_pos_bul]
+    y_data_bul = np.log(df[y_col].values[:break_pos_bul])
+    y_err_bul = np.log(df[y_err_col].values[:break_pos_bul])
+    
+    if '-hr' in sys.argv:
+        
+        x_data_bul = [val for val in x_data_bul if list(x_data_bul).index(val)%2 == 0]
+        y_data_bul = [val for val in y_data_bul if list(y_data_bul).index(val)%2 == 0]
+        y_err_bul = [val for val in y_err_bul if list(y_err_bul).index(val)%2 == 0]
 
-    initial_guess_bul = [2,40,3]
+    initial_guess_bul = [3,40,3]
     
     # Ajustar el modelo
     popt_bul, pcov_bul = curve_fit(sersic_profile_log, x_data_bul, y_data_bul, p0=initial_guess_bul,sigma=y_err_bul)
@@ -1068,10 +1119,14 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.plot(x_data_bul,y_fit_bul,color='lime',label='Sersic')
     plt.scatter(x_data_bul, y_data_bul, label='Datos', color='black', s=10)
     
+    fig_name = f'{galaxy}_lines_fitting_02_bulge.pdf'
+    fig_path = f'{cwd}/{galaxy}/{fig_name}'
+    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')   
+    
     chi_squared_bul = calculate_chi_squared(x_data_bul, y_data_bul, y_err_bul, sersic_profile_log, popt_bul)
     print(f'Chi^2 bulge: {chi_squared_bul}')
 
-    return break_pos, I_0_disk, h_disk, n_bul, r_e_bul, I_e_bul
+    return break_pos, break_pos_bul, round_number(I_0_disk,3), round_number(h_disk,3), round_number(n_bul,3), round_number(r_e_bul,3), round_number(I_e_bul,3)
 
 def integrate_luminosity(galaxy,func_csv_path,fit_par_csv_path,cons):
     
@@ -1124,6 +1179,12 @@ def integrate_luminosity(galaxy,func_csv_path,fit_par_csv_path,cons):
     results_df.to_csv(fit_par_csv_path,header=True,index=False)
 
     return fit_par_csv_path
+
+
+
+
+
+
 
 
 '''#-------------MAIN FUNCTION-------------'''
@@ -1198,65 +1259,73 @@ def main(gal_pos,galaxy):
                                             img_mask_path=mask_path,
                                             cons=(inst_arcsec_pix,zcal))
     gal_iso_fit_df = pd.read_csv(gal_iso_fit_csv_path)
-    
+
+                 
+    # PSF image
+    psf_path = create_psf(fits_path,galaxy,df_sky_info,df_psf_info)
+
     # Functions to decompose the profile
     funct_fit = ['Sersic',
                  'Exponential']#,
                  #'FerrersBar2D']
     
     # Obtaining the initial conditions
-    break_pos, I_0_disk_in, h_disk_in, n_bul_in, r_e_bul_in, I_e_bul_in = initial_conditions(gal_iso_fit_df, 'sma', 'intens', 'intens_err')
+    break_pos, break_pos_bul, I_0_disk_in, h_disk_in, n_bul_in, r_e_bul_in, I_e_bul_in = initial_conditions(gal_iso_fit_df, 'sma', 'intens', 'intens_err')
     
     # SERSIC FUNCTION: Bulge
     # Position angle
-    pos_ang_mean_ser = np.mean(gal_iso_fit_df['pa'][:break_pos+1])
+    pos_ang_mean_ser = np.mean(gal_iso_fit_df['pa'][:break_pos_bul])
     pos_ang_mean_ser = 120
     pos_ang_ser = [105,0,180]
     
     # Ellipticity
-    ellip_mean_ser = np.mean(gal_iso_fit_df['ellipticity'][:break_pos+1])
-    ellip_mean_ser = 0.5
+    ellip_mean_ser = np.mean(gal_iso_fit_df['ellipticity'][:break_pos_bul])
+    #ellip_mean_ser = 0.5
     ellip_ser = [0.5,0.1,0.9]
+    ellip_ser = [ellip_mean_ser,0.05,0.95]
     
     # Sersic Index
     ser_ind_in = n_bul_in
     ser_ind_in = 3
     ser_ind = [3,0.6,6]
+    ser_ind = [n_bul_in,0.6,6]
     
     # Effective Raidus
     rad_ef_in = r_e_bul_in
     rad_ef_in = 20
     rad_ef = [20,0,200]
+    rad_ef = [r_e_bul_in,0,200]
     
     # Intensity at effective radius
     int_ef_in = I_e_bul_in
     int_ef_in = 120
     int_ef = [120,0,500]
+    int_ef = [I_e_bul_in,0,I_e_bul_in+I_e_bul_in//2]
     
     # EXPONENTIAL FUNCTION: Disk
     # Position angle
     pos_ang_mean_disk = np.mean(gal_iso_fit_df['pa'][break_pos:])
     pos_ang_mean_disk = 105
     pos_ang_disk = [105,0,180]
-                    #pos_ang_mean_disk-pos_ang_mean_disk*0.1,
-                    #pos_ang_mean_disk+pos_ang_mean_disk*0.1]
     
     # Ellipticity
     ellip_mean_disk = np.mean(gal_iso_fit_df['ellipticity'][break_pos:])
-    ellip_mean_disk = 0.5
+    #ellip_mean_disk = 0.5
     ellip_disk = [0.5,0.1,0.9]
-                  #ellip_mean_disk-ellip_mean_disk*0.1,
-                  #ellip_mean_disk+ellip_mean_disk*0.1]
+    ellip_disk = [ellip_mean_disk,0.05,0.95]
+                  
     
     # Center intensity
     I_0_disk = I_0_disk_in
     I_0_disk = max_pix_value_center
     int_cent_disk = [I_0_disk,0,I_0_disk+I_0_disk*0.25]
+    int_cent_disk = [I_0_disk_in,0,I_0_disk_in+I_0_disk_in//2]
     
     # Length scale disk
     len_sca_in = h_disk_in
     len_sca_in = 80
     len_sca_disk = [80,0,200]
+    len_sca_disk = [h_disk_in,0,200]
     
     # FERRERS 2D BAR
     # Bar profile index
@@ -1302,9 +1371,6 @@ def main(gal_pos,galaxy):
     # Sky value
     sky_value = df_sky_info.loc[galaxy_sky_index]['sky']
     
-    # PSF image
-    psf_path = create_psf(fits_path,galaxy,df_sky_info,df_psf_info)
-    
     # Output files
     fits_model_name = f'{fits_name}_model_counts.fits'
     fits_model_path = f'{galaxy_folder_path}/{fits_model_name}'
@@ -1318,16 +1384,30 @@ def main(gal_pos,galaxy):
     
     # These lines execute imfit as it was a 
     # terminal command 
-    subprocess.run(['imfit',
-                    fits_path,
-                    '-c', conf_file_path,
-                    '--mask',mask_path,
-                    '--gain=',f'{gain_value}',
-                    '--readnoise=',f'{noise_value}',
-                    '--sky',f'{sky_value}',
-                    '--psf',psf_path,
-                    '--save-model=',fits_model_path,
-                    '--save-residual=',residual_model_path])
+    if '--imfit-nopath' in sys.argv:
+        subprocess.run(['./imfit',
+                        fits_path,
+                        '-c', conf_file_path,
+                        '--mask',mask_path,
+                        '--gain=',f'{gain_value}',
+                        '--readnoise=',f'{noise_value}',
+                        '--sky',f'{sky_value}',
+                        '--psf',psf_path,
+                        '--save-model=',fits_model_path,
+                        '--save-residual=',residual_model_path])
+        
+    else:
+        subprocess.run(['imfit',
+                        fits_path,
+                        '-c', conf_file_path,
+                        '--mask',mask_path,
+                        '--gain=',f'{gain_value}',
+                        '--readnoise=',f'{noise_value}',
+                        '--sky',f'{sky_value}',
+                        '--psf',psf_path,
+                        '--save-model=',fits_model_path,
+                        '--save-residual=',residual_model_path])        
+        
     
     # Returning to the main directory to continue the programe
     os.chdir(f'{cwd}')
@@ -1409,19 +1489,22 @@ def main(gal_pos,galaxy):
         
         results_global_df = pd.read_csv(results_global_csv_path)
         
-        if galaxy in results_global_df['galaxy'].values:
+        # Removing the previus galaxy data to ovwerwrite data
+        if galaxy in results_global_df['galaxy'].values and '-ow' in sys.argv:
             
-            print('This galaxy is already analized. Data will be overwritted')
+            print('\nThis galaxy is already analized. Data will be overwritted')
 
-            gal_ind_val = galaxy_index(results_global_df,galaxy)
-            results_global_df.loc[gal_ind_val] = results_df.loc[0]
+            #gal_ind_val = galaxy_index(results_global_df,galaxy)
+            #results_global_df.loc[gal_ind_val] = results_df.loc[0]
             
-        else:
+            results_global_df = results_global_df[~results_global_df.isin([galaxy]).any(axis=1)]
             
-            print('Adding these results to global csv')
+        print('Adding these results to global csv')
+        
+        results_global_df = pd.concat([results_global_df,results_df],
+                                        ignore_index=True)
+        
             
-            results_global_df = pd.concat([results_global_df,results_df],
-                                          ignore_index=True)
     results_global_df = results_global_df.sort_values(by='galaxy')
     results_global_df.to_csv(results_global_csv_path,header=True,index=False)
     

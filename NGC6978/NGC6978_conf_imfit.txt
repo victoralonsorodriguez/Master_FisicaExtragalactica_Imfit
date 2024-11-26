@@ -1,0 +1,14 @@
+# Configuration file for the galaxy NGC6978
+X0    188    187,189
+Y0    170    169,171
+FUNCTION Sersic
+PA    105    0,180
+ell    0.4527640688319914    0.05,0.95
+n    1.122    0.6,6
+I_e    484.164    0,726.164
+r_e    9.902    0,200
+FUNCTION Exponential
+PA    105    0,180
+ell    0.5866688310787951    0.05,0.95
+I_0    329.977    0,493.977
+h    43.24    0,200
