@@ -1,0 +1,11 @@
+# Configuration file for creating a PSF fo the galaxy MCG-01-10-019
+NCOLS 160 # x-size
+NROWS 160 # y-size
+X0 80.5
+Y0 80.5
+FUNCTION Moffat
+PA    0
+ell    0 
+I_0    100   # Counts/pixel 
+fwhm    2.555 
+beta    14.552 

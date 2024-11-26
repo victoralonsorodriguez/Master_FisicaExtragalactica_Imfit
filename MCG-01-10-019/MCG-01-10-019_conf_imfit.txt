@@ -1,0 +1,14 @@
+# Configuration file for the galaxy MCG-01-10-019
+X0    183    182,184
+Y0    149    148,150
+FUNCTION Sersic
+PA    105    0,180
+ell    0.5    0.1,0.9
+n    0.878    0.6,6
+I_e    174.446    0,261.446
+r_e    10.216    0,200
+FUNCTION Exponential
+PA    105    0,180
+ell    0.5    0.1,0.9
+I_0    104.755    0,156.755
+h    49.184    0,200

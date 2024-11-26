@@ -8,4 +8,4 @@ PA    0
 ell    0 
 I_0    100   # Counts/pixel 
 fwhm    2.1 
-beta    9.595959595959595 
+beta    9.596 

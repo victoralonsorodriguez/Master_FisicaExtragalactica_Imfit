@@ -1,0 +1,11 @@
+# Configuration file for creating a PSF fo the galaxy NGC0192
+NCOLS 253 # x-size
+NROWS 253 # y-size
+X0 127.0
+Y0 127.0
+FUNCTION Moffat
+PA    0
+ell    0 
+I_0    100   # Counts/pixel 
+fwhm    3.06 
+beta    14.646 
