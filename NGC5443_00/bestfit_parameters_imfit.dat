@@ -1,0 +1,25 @@
+# Best-fit model results for imfit 1.9.0 (OpenMP-enabled)
+# Generated on Thu Nov 28 16:09:15 2024 by the following command:
+#    imfit /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_i.fits -c /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443_00/NGC5443_conf_imfit.txt --mask /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/galaxy_files/NGC5443_mask2D_new.fits --gain= 4.76 --readnoise= 5.0625 --sky 184.60284 --psf /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443_00/NGC5443_psf_norm.fits --save-model= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443_00/NGC5443_i_model_counts.fits --save-residual= /Users/victor/Master_local/Fisica_extragalactica/Master_FisicaExtragalactica_PerfilesBrillo/NGC5443_00/NGC5443_i_model_residual_counts.fits
+
+# Results of fit:
+#   Algorithm: Levenberg-Marquardt: status = 1 -- SUCCESS: Convergence in fit-statistic value.
+#   Fit statistic: chi-squared (data-based errors)
+#   Best-fit value: 314427.699495
+#   Reduced value: 2.568959
+#   AIC: 314449.701652
+#   BIC: 314556.565580
+
+X0		530.0696 # +/- 0.0051
+Y0		178.6565 # +/- 0.0039
+FUNCTION Sersic
+PA		104.902 # +/- 0.29056	deg (CCW from +y axis)
+ell		0.191353 # +/- 0.001842
+n		2.24474 # +/- 0.013147
+I_e		430.336 # +/- 4.3757	counts/pixel
+r_e		8.88914 # +/- 0.057201	pixels
+FUNCTION Exponential
+PA		108.384 # +/- 0.019313	deg (CCW from +y axis)
+ell		0.66398 # +/- 0.00036427
+I_0		505.845 # +/- 0.92867	counts/pixel
+h		56.8201 # +/- 0.065328	pixels

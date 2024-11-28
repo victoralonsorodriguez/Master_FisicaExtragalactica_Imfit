@@ -36,6 +36,35 @@ from photutils.isophote import Ellipse
 
 '''#-------------NEEDED FUNCTIONS-------------#'''
 
+def create_galaxy_folder(galaxy):
+    
+    # Creating a folder for each galaxy
+    galaxy_folder = f'{galaxy}'
+    galaxy_folder_path = f'{cwd}/{galaxy_folder}'
+    
+    max_version = 0
+    for folder in sorted(os.listdir(f'{cwd}')):
+        if re.match(rf'{galaxy}_\d+',folder):
+            version = int(folder.split('_')[1])
+            if version > max_version:
+                max_version = version
+                
+            if '-ow' in sys.argv or '-ow-path' in sys.argv:
+                shutil.rmtree(f'{folder}')
+    
+    actual_version = max_version + 1
+    if '-ow' in sys.argv or '-ow-path' in sys.argv:
+        actual_version = 0
+    
+    galaxy_folder = f'{galaxy}_0{actual_version}'    
+    galaxy_folder_path = f'{cwd}/{galaxy_folder}'
+    
+    os.mkdir(f'{galaxy_folder_path}')
+    
+    return galaxy_folder_path
+
+
+
 def open_fits(fits_path):
     
     fits_name = fits_path.split('/')[-1].split('.')[0]
@@ -283,11 +312,17 @@ def plot_profiles(galaxy,csv_path_list,fig_name,
             axyrig.set_ylabel(r'$Position\ Angle\ [\mathrm{rad}]$')
             axyrig.tick_params(axis='y', which='major')
             
+            
+    if '-png' in sys.argv:
+        img_format = 'png'
+    else: 
+        img_format = 'pdf'
 
-    fig_name_final = f'{galaxy}_{fig_name}_profiles.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name_final}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')    
-    
+    fig_name_final = f'{galaxy}_{fig_name}_profiles.{img_format}'
+    fig_path = f'{galaxy_folder_path}/{fig_name_final}'
+    plt.savefig(f'{fig_path}', format=img_format, dpi=1000, bbox_inches='tight')    
+    plt.close()    
+        
 def plot_fit_func(galaxy,fit_par_list,rad_range):
 
     int_sum = np.zeros(len(rad_range))
@@ -374,13 +409,18 @@ def plot_fit_func(galaxy,fit_par_list,rad_range):
     ax.set_ylim(bottom=0.5)   
     plt.legend(loc='upper right')
     
-    fig_name = f'{galaxy}_fit_func.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')
+    if '-png' in sys.argv:
+        img_format = 'png'
+    else: 
+        img_format = 'pdf'
+    
+    fig_name = f'{galaxy}_fit_func.{img_format}'
+    fig_path = f'{galaxy_folder_path}/{fig_name}'
+    plt.savefig(f'{fig_path}', format=img_format, dpi=1000, bbox_inches='tight')
     plt.close()
     
     csv_name = f'{galaxy}_fit_funct.csv'
-    csv_path = f'{cwd}/{galaxy}/{csv_name}'
+    csv_path = f'{galaxy_folder_path}/{csv_name}'
     int_func_df.to_csv(csv_path,header=True,index=False)
     
     if len(int_func_df) != 0:
@@ -495,10 +535,15 @@ def plot_images(gal_img,fig_name,cons,
     
     axyrig.set_ylabel(r'$Y\ dimension\ [\mathrm{kpc}]$')
     axyrig.tick_params(axis='y', which='major')
-
     
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', dpi=1000, bbox_inches='tight')
+    if '-png' in sys.argv:
+        img_format = 'png'
+    else: 
+        img_format = 'pdf'
+
+    fig_name = f'{fig_name}.{img_format}'
+    fig_path = f'{galaxy_folder_path}/{fig_name}'
+    plt.savefig(f'{fig_path}',format=img_format, dpi=1000, bbox_inches='tight')
     plt.close()
 
 def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None):
@@ -525,7 +570,7 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
         gal_img_fit = img_gal_mask
     
     
-    fig_name = f'{gal_img_name}_image_analyze.pdf'
+    fig_name = f'{gal_img_name}_image_analyze'
     plot_images(gal_img_fit,fig_name,cons=cons)
     
     
@@ -573,7 +618,7 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
                 
     # Export it as a csv
     isophote_table_name = f'{gal_img_name}_isophote.csv'
-    isophote_table_path = f'{cwd}/{galaxy}/{isophote_table_name}'
+    isophote_table_path = f'{galaxy_folder_path}/{isophote_table_name}'
     isophote_table.write(f'{isophote_table_path}', format='csv', overwrite=True)
     
     # Creating some figures    
@@ -585,23 +630,12 @@ def isophote_fitting(galaxy,img_gal_path,gal_center,img_mask_path=None,cons=None
         plot_profiles(galaxy,plot_list,'i_model',cons=cons)
     
     
-    fig_name = f'{gal_img_name}_ellipses.pdf'
+    fig_name = f'{gal_img_name}_ellipses'
     plot_images(gal_img,fig_name,cons=cons,ellip=True,isolist=isolist)
     
     return isophote_table_path
 
-def create_galaxy_folder(galaxy):
-    
-    # Creating a folder for each galaxy
-    galaxy_folder = f'{galaxy}'
-    galaxy_folder_path = f'{cwd}/{galaxy_folder}'
-    
-    # If the folder was created previously is remvoved
-    if os.path.isdir(f'{galaxy_folder_path}') == True:
-        shutil.rmtree(f'{galaxy_folder_path}')
-    os.mkdir(f'{galaxy_folder_path}')
 
-    return galaxy_folder_path
 
 def fits_mag_to_counts(fits_path,inst,zcal):
     
@@ -613,7 +647,7 @@ def fits_mag_to_counts(fits_path,inst,zcal):
     # Expoting the new fits
     fits_name = fits_name.split('mag')[0]
     fits_flux_name = f'{fits_name}_counts.fits'
-    fits_flux_path = f'{cwd}/{galaxy}/{fits_flux_name}'
+    fits_flux_path = f'{galaxy_folder_path}/{fits_flux_name}'
     fits.writeto(f'{fits_flux_path}', fits_flux_img, header=hdr_mag, overwrite=True)
     
     return fits_flux_path
@@ -629,7 +663,7 @@ def fits_counts_to_mag(fits_path,inst,zcal):
     # Expoting the new fits
     fits_name = fits_name.split('counts')[0]
     fits_mag_name  = f'{fits_name}_mag.fits'
-    fits_mag_path = f'{cwd}/{galaxy}/{fits_mag_name}'
+    fits_mag_path = f'{galaxy_folder_path}/{fits_mag_name}'
     fits.writeto(f'{fits_mag_path}', fits_mag_img, header=hdr_flux, overwrite=True)
     
     return fits_mag_path  
@@ -779,7 +813,7 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
     
     # Creating the configuration script for the psf
     psf_conf_file_name = f'{galaxy}_conf_psf.txt'
-    psf_conf_file_path = f'{cwd}/{galaxy}/{psf_conf_file_name}'
+    psf_conf_file_path = f'{galaxy_folder_path}/{psf_conf_file_name}'
     psf_conf_file = open(psf_conf_file_path,'w+')
     create_conf_psf(file=psf_conf_file,
                      galaxy = galaxy,
@@ -792,7 +826,7 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
     
     # Creating the PSF
     fits_psf_name = f'{galaxy}_psf.fits'
-    fits_psf_path = f'{cwd}/{galaxy}/{fits_psf_name}'
+    fits_psf_path = f'{galaxy_folder_path}/{fits_psf_name}'
 
     if '--imfit-nopath' in sys.argv:
 
@@ -815,7 +849,7 @@ def create_psf(fits_path,galaxy,df_sky,df_psf):
     
     # Saving the results
     fits_psf_norm_name = f'{galaxy}_psf_norm.fits'
-    fits_psf_norm_path = f'{cwd}/{galaxy}/{fits_psf_norm_name}'
+    fits_psf_norm_path = f'{galaxy_folder_path}/{fits_psf_norm_name}'
     
     fits.writeto(f'{fits_psf_norm_path}',img_psf_norm,hdr_psf,overwrite=True)
 
@@ -947,7 +981,7 @@ def extract_data_hdr(galaxy,best_file,cons):
     
     
     csv_name = f'{galaxy}_i_results.csv'
-    csv_path = f'{cwd}/{galaxy}/{csv_name}'
+    csv_path = f'{galaxy_folder_path}/{csv_name}'
     results_df.to_csv(csv_path,header=True,index=False)
     
     return fit_par_list,fit_min_par,csv_path
@@ -1047,9 +1081,14 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.legend()
     plt.grid(True)
     
-    fig_name = f'{galaxy}_lines_fitting_00.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')   
+    if '-png' in sys.argv:
+        img_format = 'png'
+    else: 
+        img_format = 'pdf'
+        
+    fig_name = f'{galaxy}_lines_fitting_00.{img_format}'
+    fig_path = f'{galaxy_folder_path}/{fig_name}'
+    plt.savefig(f'{fig_path}', format=img_format, dpi=1000, bbox_inches='tight')   
     
     # SEGUNDA ETAPA: AJUSTE DEL DISCO
     print(f'\nDisco')
@@ -1078,9 +1117,14 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.plot(x_data_disk,y_fit_disk,color='gold')
     plt.scatter(x_data_disk, y_data_disk, label='Datos', color='black', s=10)
     
-    fig_name = f'{galaxy}_lines_fitting_01_disk.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')   
+    if '-png' in sys.argv:
+        img_format = 'png'
+    else: 
+        img_format = 'pdf'
+    
+    fig_name = f'{galaxy}_lines_fitting_01_disk.{img_format}'
+    fig_path = f'{galaxy_folder_path}/{fig_name}'
+    plt.savefig(f'{fig_path}', format=img_format, dpi=1000, bbox_inches='tight')   
     
     chi_squared_disk = calculate_chi_squared(x_data_disk, y_data_disk, y_err_disk, exponential_disk_linear, popt_disk)
     print(f"Chi^2 disk: {chi_squared_disk}")
@@ -1119,9 +1163,14 @@ def initial_conditions(df, x_col, y_col,y_err_col):
     plt.plot(x_data_bul,y_fit_bul,color='lime',label='Sersic')
     plt.scatter(x_data_bul, y_data_bul, label='Datos', color='black', s=10)
     
-    fig_name = f'{galaxy}_lines_fitting_02_bulge.pdf'
-    fig_path = f'{cwd}/{galaxy}/{fig_name}'
-    plt.savefig(f'{fig_path}', format='pdf', dpi=1000, bbox_inches='tight')   
+    if '-png' in sys.argv:
+        img_format = 'png'
+    else: 
+        img_format = 'pdf'
+    
+    fig_name = f'{galaxy}_lines_fitting_02_bulge.{img_format}'
+    fig_path = f'{galaxy_folder_path}/{fig_name}'
+    plt.savefig(f'{fig_path}', format=img_format, dpi=1000, bbox_inches='tight')   
     
     chi_squared_bul = calculate_chi_squared(x_data_bul, y_data_bul, y_err_bul, sersic_profile_log, popt_bul)
     print(f'Chi^2 bulge: {chi_squared_bul}')
@@ -1182,11 +1231,6 @@ def integrate_luminosity(galaxy,func_csv_path,fit_par_csv_path,cons):
 
 
 
-
-
-
-
-
 '''#-------------MAIN FUNCTION-------------'''
 
 def main(gal_pos,galaxy):
@@ -1194,7 +1238,9 @@ def main(gal_pos,galaxy):
     start_time_gal = time.time()
     
     # Creating a folder for each galaxy
+    global galaxy_folder_path
     galaxy_folder_path = create_galaxy_folder(galaxy)
+    
     
     # Position of the galaxy in the sky info dataframe
     galaxy_sky_index = galaxy_index(df_sky_info,galaxy)
@@ -1212,7 +1258,7 @@ def main(gal_pos,galaxy):
     # Opening the galaxy image 
     hdr_gal,img_gal,fits_name = open_fits(fits_path)
     
-    fig_name = f'{fits_name}.pdf'
+    fig_name = f'{fits_name}'
     plot_images(img_gal,fig_name,cons=(inst_arcsec_pix,zcal))
 
     # obtaining the shape of the fits
@@ -1380,7 +1426,7 @@ def main(gal_pos,galaxy):
     residual_model_path = f'{galaxy_folder_path}/{residual_model_name}'
     
     # Changing the directory to run imfit
-    os.chdir(f'{galaxy}')
+    os.chdir(f'{galaxy_folder_path}')
     
     # These lines execute imfit as it was a 
     # terminal command 
@@ -1413,7 +1459,7 @@ def main(gal_pos,galaxy):
     os.chdir(f'{cwd}')
     
     best_parameters_name = 'bestfit_parameters_imfit.dat'
-    best_parameters_path = f'{cwd}/{galaxy}/{best_parameters_name}'
+    best_parameters_path = f'{galaxy_folder_path}/{best_parameters_name}'
     fit_par_list,fit_min_par,fit_par_csv_path = extract_data_hdr(galaxy,best_parameters_path,
                                                                  cons=(inst_arcsec_pix,zcal))    
     
@@ -1438,10 +1484,10 @@ def main(gal_pos,galaxy):
     
     img_res_mag = img_gal_mag - img_mod_mag
     img_res_mag_name = f'{galaxy}_i_model_residual_mag.fits'
-    img_res_mag_path = f'{cwd}/{galaxy}/{img_res_mag_name}'
+    img_res_mag_path = f'{galaxy_folder_path}/{img_res_mag_name}'
     fits.writeto(f'{img_res_mag_path}',img_res_mag,header=hdr_gal_mag,overwrite=True)
     
-    img_res_mag_name = f'{galaxy}_i_model_residual_mag.pdf'
+    img_res_mag_name = f'{galaxy}_i_model_residual_mag'
     plot_images(img_res_mag,img_res_mag_name,cons=(inst_arcsec_pix,zcal),mag=True,res=True)
     
     
@@ -1490,7 +1536,7 @@ def main(gal_pos,galaxy):
         results_global_df = pd.read_csv(results_global_csv_path)
         
         # Removing the previus galaxy data to ovwerwrite data
-        if galaxy in results_global_df['galaxy'].values and '-ow' in sys.argv:
+        if galaxy in results_global_df['galaxy'].values and ('-ow' in sys.argv or '-ow-csv' in sys.argv):
             
             print('\nThis galaxy is already analized. Data will be overwritted')
 
