@@ -1,0 +1,11 @@
+# Configuration file for creating a PSF fo the galaxy NGC5443
+NCOLS 295 # x-size
+NROWS 295 # y-size
+X0 148.0
+Y0 148.0
+FUNCTION Moffat
+PA    0
+ell    0 
+I_0    100   # Counts/pixel 
+fwhm    2.55 
+beta    11.616 
